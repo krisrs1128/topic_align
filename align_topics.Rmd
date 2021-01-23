@@ -1,0 +1,208 @@
+---
+title: "Aligning topics"
+author: "Kris, Laura & Julia"
+date: "1/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE)
+```
+
+# Objectives
+
+We aim at developing a method to align and compare topics when
+
+(1) the number of topics is changed (varying K)
+
+(2) hyper-parameters of LDA are changed (e.g. varying alpha)
+
+(3) different modalities [? is there a better term than "modality" ?] exists for the same documents. For example, the same set of documents exists in different languages but we don't have a direct translation of each word. Or, more commonly encountered in biology, the same samples have been analyzed for different -omics information, _e.g._ metagenomic or transcriptomic, and there is a desire to compare the topics from these different domains.
+
+
+# Notations
+
+__Models__
+
+We aim to compare the topics of $M$ LDA models. Each specific model is denoted by $m \in [1:M]$.
+
+__Topics__
+
+Each model $M$ has $K$ topics. Each topic is denoted by $k \in [1:K]$.
+
+__Documents (Samples)__
+
+The dataset is composed of $D$ documents (or samples). Each document/sample is denoted by $d \in [1:D]$. 
+
+__Words (features)__
+
+The dataset contains counts for a set of $W$ words (or features). In biology, these features would be genes, transcripts, proteins, bacterial species, etc. Each word is denoted by an index $w \in [1:W]$. The number of word $w$ found in a specific document $d$ is denoted by $c_{w,d}$.
+
+__LDA model matrices__
+
+LDA models are defined by two matrices: 
+
+- $\beta$, which is a $K \times W$ matrix where element $\beta_{k,w}$ provides the proportion of word $w$ in topic $k$, and 
+
+- $\gamma$, which is a $D \times K$ matrix where element $\gamma_{d,k}$ provides the proportion of topic $k$ in document $d$.
+
+In order words, an LDA finds topics such that each document is optimally described as a mixture of topics ($\gamma$), themselves characterized by a word probability ($\beta$).
+
+
+# Aligning topics.
+
+For objectives (1) and (2), we can align topics using the $\beta$ matrices from each model $m$, while for objective (3), only matrix $\gamma$ can be used to align topics.
+
+We will thus first consider the problem of aligning topics using the $\gamma$ matrices, then consider the "inverse" problem of aligning topics using the $\beta$ matrices and discuss similarities and differences.
+
+In both case, in addition to aligning topics between successive models (_e.g._ successive values of K or $alpha$, or manually ordered modalities), we are also interested in computing and visualizing the alignment between each model and a reference model $m^R$.
+
+## Aligning topics based on the $\gamma$ matrices
+
+First, each document $d$ is assigned a topic of reference $k_R$ which is defined as the topic of the reference model $m_R$ with the largest proportion for this document: $k^R_d = \arg \max \gamma_{d,k^R}$.
+
+
+We then compute the proportion of mass transferred between each topic of successive models as $w^{\gamma}_{k^m, k^{m+1}} = \frac{1}{D} \sum_{d}^D \gamma_{d,k^m} \ \gamma_{d, k^{m+1}}$
+
+And if we desire to split these weights by reference topics, we have $w^{\gamma}_{k^m, k^{m+1},k^R} = \frac{1}{D^R} \sum_d^{D^R} \ \gamma_{d,k^m} \ \gamma_{d, k^{m+1}} $.
+
+Consequently, the "height" of each topic $h_{k^m}$ is $h_{k^m} = \sum_d \gamma_{d,k^m}$. Topics that are the main topics of many documents have a larger "height" that topics that are secondary topics of many documents or the main topic of few documents.
+
+
+## Aligning topics based on the $\beta$ matrices
+
+To align topics based on the distribution of word probability in these topics, we first define the following concepts:
+
+- the average word frequency: $f_w = \frac{1}{D} \sum_d^D f_{w,d}$ with $f_{w,d} =  \frac{c_{w,d}}{\sum_w^W c_{w,d}}$
+
+- the "topic height": $h_{k^m} = \sum_w^W f_w \ \beta_{w,k}$
+
+- the "reference topic height" in each topic: $h_{k^m, k^R} = \sum_w^{W^R} f_w \  \beta_{w,k^m}$
+
+[NOTE: these definitions are sufficient to draw the composition of each topic for each $m$, but to draw the flow between the topics, we need to find the optimal mass transfer - I kept writing down my notes, but it's not super useful and it's not implemented, instead, I implemented something a little ugly for the visualization of the flows]
+
+- the "word height" in each topic: $h_{w, k^m} = \beta_{w,k^m} \ h_{k^m}$
+
+- the modeled "word height" over all topics: XXXX
+
+
+
+
+# Implementation
+
+We have implemented the methods described above in a series of functions which can be ran sequentially:
+
+- `run_LDA_models`, which runs the LDA models for a specified set of $K$s, $\alpha$s or modalities.
+
+- (optional) `trim_LDA_models` filter the $\beta$ matrix to keep only $N$ (set by user) words or words with a probability of at least $p_{min}$ (set by users) in any topic.
+
+- `align_topics` performs the topic alignment on the $\gamma$ matrices and re-order the topics so that most align topics are "close to each others" [not sure how to formulate this]. Then, if possible, this function computes the alignment based on the $\beta$ matrices [honestly, the solution with the $\gamma$ is so elegant, easy and can be applied to any case, that I wonder if it's even worth trying to do the alignment based on the $\beta$ matrix. Let's talk :)]. If a reference model is not provided, the last model is used as a reference.
+
+- `visualize_topic_alignment` computes the visualization layout and return a ggplot object with the alignment flow between topics.
+
+Below is an example of how these functions are used on vaginal microbiome data.
+
+## Example 1: varying $K$
+
+```{r workflow-demo-libraries}
+
+# Libraries to attach
+library(tidyverse)
+library(magrittr)
+library(topicmodels)
+library(slam)
+
+# load the topic alignment functions
+source("align_topic_functions.R")
+
+# viz default theme
+theme_set(theme_minimal())
+
+```
+
+```{r workflow-demo-load-and-prepare-data}
+
+load(file = "vm_16s_data.Rdata", verbose = TRUE)
+vm_16s <- slam::as.simple_triplet_matrix(vm_16s %>%  round())
+
+```
+
+```{r workflow-demo-run-lda-models}
+
+topic_models_dir = "lda_models/"
+
+lda_models = 
+  run_lda_models(
+    data = vm_16s,
+    Ks = 1:13,
+    method = "VEM",
+    seed = 2,
+    dir = topic_models_dir
+  )
+
+names(lda_models)
+head(lda_models$betas)
+head(lda_models$gammas)
+
+```
+
+
+```{r workflow-demo-trim-models}
+
+trimmed_lda_models = 
+  trim_models(
+    models = lda_models,
+    min_prop = 0.025)
+
+dim(lda_models$betas)
+dim(trimmed_lda_models$betas)
+
+```
+
+
+```{r workflow-demo-align-topics}
+
+
+aligned_topics = 
+  align_topics(
+    data = asv_for_topic, 
+    lda_models = trimmed_lda_models
+  )
+
+names(aligned_topics)
+head(aligned_topics$gamma_alignment)
+# head(aligned_topics$beta_alignment) # not implemented
+
+```
+
+
+```{r workflow-demo-order-topics}
+
+ggplot(aligned_topics$topics_order, aes(x = m, y = k, col = k_LDA)) + 
+  geom_text(aes(label = k_LDA)) + guides(col = FALSE)
+
+```
+
+
+```{r workflow-demo-viz, fig.width=10, fig.height=8}
+
+g_aligned_topics = 
+  visualize_aligned_topics(
+    aligned_topics = aligned_topics
+    )
+
+g_aligned_topics
+
+```
+
+
+## Example 2: varying $\alpha$
+
+
+## Example 3: aligning topic accross modalities
+
+
+
+
+
+
