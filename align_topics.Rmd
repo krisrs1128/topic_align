@@ -123,7 +123,23 @@ theme_set(theme_minimal())
 ```{r workflow-demo-load-and-prepare-data}
 
 load(file = "vm_16s_data.Rdata", verbose = TRUE)
+new_asv_names =  colnames(vm_16s) %>% 
+  str_split_fixed(., " ", n = 8) %>%
+  as.matrix() %>% .[,c(6, 7, 8)]  %>%
+  as.data.frame() %>% 
+  set_colnames(c("genus","species","strain")) %>% 
+   mutate(short_name = 
+            str_c(genus, " ", 
+                  species %>% str_replace(.,"NA","-")," ",
+                  strain)) %>% 
+  select(short_name) %>% unlist()
+
+j = which(duplicated(new_asv_names))
+new_asv_names[j] = str_c(new_asv_names[j], " (", 1:length(j),")")
+colnames(vm_16s) = new_asv_names
+  
 vm_16s <- slam::as.simple_triplet_matrix(vm_16s %>%  round())
+
 
 ```
 
@@ -147,26 +163,13 @@ head(lda_models$gammas)
 ```
 
 
-```{r workflow-demo-trim-models}
-
-trimmed_lda_models = 
-  trim_models(
-    models = lda_models,
-    min_prop = 0.025)
-
-dim(lda_models$betas)
-dim(trimmed_lda_models$betas)
-
-```
-
 
 ```{r workflow-demo-align-topics}
-
 
 aligned_topics = 
   align_topics(
     data = asv_for_topic, 
-    lda_models = trimmed_lda_models
+    lda_models = lda_models
   )
 
 names(aligned_topics)
@@ -188,10 +191,43 @@ ggplot(aligned_topics$topics_order, aes(x = m, y = k, col = k_LDA)) +
 
 g_aligned_topics = 
   visualize_aligned_topics(
-    aligned_topics = aligned_topics
+    aligned_topics = aligned_topics,
+    add_leaves = TRUE,
+    min_beta = 0.05,
+    add_words_labels = TRUE
     )
 
 g_aligned_topics
+
+
+g_aligned_topics = 
+  visualize_aligned_topics(
+    aligned_topics = aligned_topics,
+    add_leaves = FALSE
+    )
+
+g_aligned_topics
+
+
+
+g_aligned_topics_ref = 
+  visualize_aligned_topics(
+    aligned_topics = aligned_topics,
+    color_by = "reference",
+    add_leaves = FALSE
+    )
+
+g_aligned_topics_ref
+
+
+g_aligned_topics_ref = 
+  visualize_aligned_topics(
+    aligned_topics = aligned_topics,
+    color_by = "reference",
+    add_leaves = TRUE
+    )
+
+g_aligned_topics_ref
 
 ```
 
