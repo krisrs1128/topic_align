@@ -1,0 +1,222 @@
+---
+title: "Background Notes"
+output:
+  pdf_document:
+    template: style.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE)
+```
+
+These are notes on literature that we may be able to use for our study.
+
+# Hierarchical Topics
+
+\begin{enumerate}
+
+\item The hierarchical topic model was introduced in this
+\href{https://papers.nips.cc/paper/2003/file/7b41bfa5085806dfa24b8c9de0ce567f-Paper.pdf}{paper}.
+It defines a generative mechanism for simulating documents so that they can be
+grouped into topics at multiple levels of resolution. We could use this in a
+simulation to understand our approach.
+
+\item I'll try to summarize the main idea in somewhat simpler language than the
+paper\footnote{I'm ignoring the fact that the trees could have infinite width at any
+level. I think the paper's emphasis on this is probably due to the fact that, in
+2003, Bayesian Nonparametrics was all the rage.}.
+
+\begin{enumerate}
+
+\item Imagine a depth $L$ tree. At each node, we associate a topic -- say
+$\beta_{k}^{l}$ for the $k^{th}$ topic at level $l$ gives a particular
+distribution over a size $V$ vocabulary. These topics are drawn $\beta_{k}^{l}
+\sim \text{Dir}\left(\eta\right)$, just like in ordinary LDA.
+
+\item Associate each document with a path from the root to a leaf. Documents that
+have highly overlapping paths will be similar. Specifically, suppose document
+$i$ goes through topics $k_{i}^{1}, \dots, k_{i}^{L}$.
+
+\item Draw a length $L$ mixture vector $\theta \sim \text{Dir}\left(\alpha\right)$.
+The idea of the paper is to draw $V$-dimensional word counts $x_{i}$ associated
+with document $i$ according to,
+
+\begin{align*}
+x_{i} \sim \text{Mult}\left(x_{i} \vert N, \sum_{l = 1}^{L} \theta_{l}\beta_{k_{i}}^{l}\right)
+\end{align*}
+
+where I have fixed the total number of words $N$ in the document. Effectively,
+we mix all the topics along the path associated with this document. The "hard"
+clustering version of this would have just picked one topic along the path and
+drawn all words from that topic.
+
+\item I haven't specified how the trees are constructed or how paths are simulated.
+In the paper, you first draw a single path from root to $L$ (a completely
+vertical "tree"). When you draw a second path, you have the option of branching
+off from this path with a certain probability. In subsequent draws, paths that
+have the most "traffic" are preferred, though you always have the potential to
+break off into a new branch.
+
+\end{enumerate}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.7\textwidth]{htm_sketch.png}
+\caption{A toy representation of the simulation process, assuming a fixed tree.}
+\end{figure}
+
+\item Since documents with overlapping paths will share $\beta_{k_{i}}$'s, they
+will tend to use similar words. Note, however, that the tree structure here is
+not comparable to those that we have been creating. In our trees, nodes that are
+linked to one another have topics $\beta_{k}^{l}$ that are aligned (in some
+sense). In this model, all topics are drawn iid from different Dirichlets. The
+similarity between documents is a consequence of their having overlapping paths.
+
+\item That said, the topics near the root of the tree will occur across many paths,
+so will appear often in the sums $\sum_{l}\theta_{l}\beta_{k_i}^{l}$. We would
+expect our learned topics with small $K$ to mostly reflect the contribution from
+these top-of-tree $\beta_{k}^{l}$'s. Our large $K$ topics will likely reflect
+the contributions from many $\beta$'s along particularly popular paths.
+
+\end{enumerate}
+
+# Mass Transport
+
+\begin{enumerate}
+\item The Kantorovich formulation of the optimal transport problem supposes that
+we want to transport masses $\*a \in \*R^{n}$ from $n$ locations to masses
+$\*b \in \*R^{m}$ at $m$ other locations. The cost of transporting from
+location $i$ to $j$ is written $c_{ij}$ and collected into a cost matrix $\*C$.
+We denote the proportion of $a_{i}$ that's delivered to $b_{j}$ by $b_{ij}$; the
+matrix $\*{P} \in \*{R}^{n \times m}_{+}$ is called the transportation plan. The
+goal is to find a transportation plan $\*P^{\ast}$ that minimizes the total
+transport cost,
+
+\begin{align}
+\label{eq:opt0}
+\min_{\*{P} \in \mathcal{U}\left(\*a, \*b\right)} \left< \*{C}, \*{P}\right>
+\end{align}
+
+where we have defined the set of appropriate plans by 
+
+\begin{align*}
+\mathcal{U}\left(\*a, \*b\right) := \{\*{P} \in \*{R}^{n \times m}_{+} : \*{P}\*{1}_{m} = \*{a} \text { and } \*{P}\*{1}_{n} = \*{b}\}.
+\end{align*}
+
+\item If $\*a$ and $\*b$ are viewed as measures, then $\mathcal{U}\left(\*a,
+\*b\right)$ is the set of couplings between those measures.
+\item A nice motivating story is that there are $n$ mines producing material for
+$m$ factories. The amount of raw material at mine $i$ is $a_i$; the amount of
+material required by factory $j$ is $b_{j}$. The cost of transporting material
+from mine $i$ to factory $j$ is $c_{ij}$.
+\item For topic alignment, we can view one set of topics as mines and another
+set of topics as factories. Topics that have large values $\sum_{d} \gamma_{dk}$
+have a lot of material. The transportation cost is related to the distance
+between the topics on the simplex. We elaborate on this formulation elsewhere.
+\item For illustration, let's create two measures $\*a$ (green) to $\*b$
+(orange). The problem is to find links between them so that mass flows between
+without having to travel too far (i.e., without having too high a cost).
+\end{enumerate}
+
+```{r, fig.width = 4, fig.height = 3}
+library("MASS")
+library("dplyr")
+library("ggplot2")
+source("background_funs.R")
+theme_set(theme_minimal())
+
+# simulating masses
+masses <- illustration_data(4, 5)
+ggplot(masses) +
+  geom_point(aes(x = V1, y = V2, size = mass, col = set)) +
+  scale_color_brewer(palette = "Set2") +
+  theme(legend.position = "bottom")
+```
+
+\begin{enumerate}
+\item Solving the problem \ref{eq:opt0} is computationally challenging. It turns
+out that a regularized version is easier to solve,
+\begin{align}
+\label{eq:opt_reg}
+\min_{\*P \in \mathcal{U}\left(\*a, \*b\right)} \left<\*P, \*C\right> - \epsilon H\left(\*P\right)
+\end{align}
+where $H$ is an entropy penalty,
+\begin{align*}
+H\left(\*P\right) &:= -\sum_{i, j}p_{ij}\left(\log p_{ij} - 1\right) \\
+&= -\left<\*P, \log \*P - \*1 \*1^{T}\right>
+\end{align*}
+\item A popular algorithm for solving this optimization is Sinkhorn's algorithm.
+Define a transformed\footnote{In this and the remainder of the discussion,
+operations and matrices and vectors should be interpreted elementwise.} cost
+matrix $\*K$,
+\begin{align*}
+\*K &= \exp{-\frac{1}{\epsilon}\*C}
+\end{align*}
+which is large only on those ``edges'' where it transport is cheap. Larger
+$\epsilon$ make you less picky about which edges you prefer.
+\item With this definition in place, the algorithm proceeds by first
+initializing $\*v^{0} = \*1$ and then alternating the updates,
+\begin{align*}
+\*u^{t + 1} &= \frac{\*a}{\*K \*v^{t}} \\
+\*v^{t + 1} &= \frac{\*b}{\*K^{T} \*u^{t + 1}}
+\end{align*}
+for some auxiliary variables $\*u$ and $\*v$ that, upon convergence to
+$\*u^{\ast}$ and $\*v^{\ast}$, define the optimal $\*P^{\ast}$,
+\begin{align*}
+\*P^{\ast} &= \text{diag}\left(\*u^{\ast}\right)\*K \text{diag}\left(\*v^{\ast}\right)
+\end{align*}
+\item Let's look at an implementation on the toy dataset from above. Our cost
+matrix will be the euclidean distance between the masses.
+\end{enumerate}
+
+```{r}
+library("pdist")
+library("purrr")
+distn <- masses %>%
+  split(.$set) %>%
+  map(~ select(., V1, V2, mass))
+C <- pdist(distn[[1]][, 1:2], distn[[2]][, 1:2]) %>%
+  as.matrix()
+
+sink_res <- sinkhorn(distn[[1]]$mass, distn[[2]]$mass, C, 0.01)
+links <- merge_link_data(sink_res$P, masses)
+```
+
+
+```{r, fig.height = 3, fig.width = 4}
+ggplot() +
+  geom_segment(
+    data = links, 
+    aes(x = V1.x, xend = V1.y, y = V2.x, yend = V2.y, alpha = log(value)),
+    size = 1, col = "#d3d3d3"
+    ) +
+  scale_alpha(range = c(0.001, 1)) +
+  geom_point(data = masses, aes(x = V1, y = V2, size = mass, col = set)) +
+  scale_color_brewer(palette = "Set2") +
+  theme(legend.position = "bottom")
+```
+
+\begin{enumerate}
+\item This algorithm can at times be numerically unstable, because the
+elementwise division in the alternating updates can end up dividing by 0. In
+fact, if you check the links above, you will find that the mass constraint
+$\*P\*1_{m} = \*b$ is not even close to being satisfied. This is because I chose
+a large $\epsilon$ -- any smaller, and R would complain that I am dividing by 0.
+\item An alternate formulation is more stable. The starting point is the dual of
+the regularized optimization \ref{eq:opt_reg},
+\begin{align}
+\max_{\*f \in \reals^{n}, \*g \in \reals^{m}} \left<\*f, \*a\right> + \left<\*g, \*b\right> - \epsilon \left<\exp{\frac{1}{\epsilon}\*f}, \exp{\frac{1}{\epsilon}\*g}\right>
+\end{align}
+\item It turns out (not at all obvious) that this can also be optimized through
+alternating iterations, this time of $\*f$ and $\*g$. The updates are,
+\begin{align*}
+\*f^{t + 1} := \text{rowmin}_{\epsilon}\left(\*C - \*f^{t} \*1_{m}^{T} - \*1_{n}^{T}\*g^{t}\right) + \*f^{t} + \epsilon \log\left(\*a\right) \\
+\*g^{t + 1} := \text{colmin}_{\epsilon}\left(\*C - \*f^{t + 1} \*1_{m}^{T} - \*1_{n}^{T}\*g^{t}\right) + \*g^{t} + \epsilon \log\left(\*b\right)
+\end{align*}
+where we apply the soft-minimum,
+\begin{align*}
+\text{softmin}_{\epsilon} \*z := \min \*z - \epsilon \log \sum_{i} \exp{-\frac{1}{\epsilon}\left(z_{i} - \min \*z\right)}
+\end{align*}
+row and column-wise, for $\text{rowmin}_{\epsilon}$ and
+$\text{colmin}_{\epsilon}$, respectively.
+\end{enumerate}

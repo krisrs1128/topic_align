@@ -1,0 +1,30 @@
+\documentclass[10pt,reqno]{amsart}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,
+	linkcolor=violet,
+	citecolor=SeaGreen]{hyperref}
+\hypersetup{bookmarksopen=true}
+\usepackage{graphicx}
+\usepackage{libertine}
+\renewcommand{\exp}[1]{\operatorname{exp}\left(#1\right)} % Exponential
+\def\reals{\mathbb{R}} % Real number symbol
+\def\simplex{\mathcal{S}} % Simplex
+\def\indic#1{\mbb{I}\left({#1}\right)} % Indicator function
+
+$if(highlighting-macros)$
+$highlighting-macros$
+$endif$
+
+\usepackage{fancyvrb}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}, fontfamily=cmtt, fontsize=\small}
+
+% shortcuts
+\def\*#1{\mathbf{#1}}
+
+
+\title{$title$}
+\begin{document}
+\maketitle
+
+$body$
+\end{document}
