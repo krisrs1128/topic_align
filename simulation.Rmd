@@ -1,0 +1,101 @@
+---
+title: "Simulations"
+output:
+  pdf_document:
+    template: notes/style.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE)
+```
+
+\begin{enumerate}
+\item The purpose of simulation is to provide a controlled environment within
+which we can compare alternative analysis strategies. At the very least, we can
+define a distance between learned alignments and specify which choices lead to
+similar and different alignments. Ideally, we could also say something about
+whether one alignment is ``better'' than another, but I'm not worried if we
+can't answer this definitively.
+\item Strategy 1 [Ordinary LDA]: We could just simulate from an LDA model with a
+fixed $K$. This sounds a little silly -- why bother with alignment? -- but the
+truth is we'd never know $K$ in practice, so the alignment exercise could still
+be productive. This simulation is also useful if we want to illustrate how
+refinements (and their associated metrics) look before and after the true $K$ is
+hit.
+\item Something I don't like about just simulating from a fixed $K$ is that
+people might then become fixated on choosing the ``right'' $K$, which is
+inimical\footnote{To use a word I just learned.} to the whole point of the
+study. I'd like to argue that none of the choices of $K$ are correct, but that
+we can be informed about what trade-offs are involved between different choices.
+\end{enumerate}
+
+# Strategy 2: Branching process-inspired
+\begin{enumerate}
+\item For this reason, a more complex setup might be useful. The idea in this
+strategy is to simulate topics that branch off from one another over time. We
+would simulate documents from the topics at the leaves. However, since we know
+the overall branching structure, we can argue that topics with a similar
+most-recent-common-ancestor should appear closer to one another in our diagram.
+Further, it would be interesting if the intermediate branches on the tree are
+somehow recovered when estimating with smaller $K$.
+\item How to implement strategy 2, specifically? We can define something
+inductively. Start with a $\mu_{0} = 0$. Given a tree of means, we simulate a
+new leaf node according to 
+\begin{align*}
+\mu_{i} \vert \mu_{\mathcal{P}\left(i\right)} &\sim \Gsn\left(\mu_{i} \vert \mu_{\mathcal{P}\left(i\right)}, T_{\mathcal{P}\left(i\right)} I_{d}\right)
+\end{align*}
+where $T_{\mathcal{P}\left(i\right)}$ denotes the time elapsed between the
+parent node $\mathcal{P}\left(i\right)$ and all its children.
+\item To fully specify this, we need to determine (i) the $T_i$'s and (ii) the
+number of children for each node. For (i), we just simulate $T_i \sim
+\text{Expo}\left(\lambda\right)$, and for (ii) we just always choose 2. \item
+This is a simulation in $\reals^{V}$, but our data have to lie on $\simplex^{V -
+1}$. So, let's squash all the means onto the simplex. Specifically, suppose $L$
+indexes all the leaf nodes. Then we define topics according to,
+\begin{align*}
+\beta_{l} := \frac{\exp{\mu_{l}}}{\sum_{l^{\prime} \in L} \exp{\mu_{l^{\prime}}}},
+\end{align*}
+where $\exp{}$ is applied elementwise.
+\end{enumerate}
+
+# What does strategy 2 look like?
+
+Here is an R simulation.
+
+
+# Multimodal simulation
+
+\begin{enumerate}
+\item How can we evaluate alignment of topics learned across modalities? 
+\item Strategy 1: We can simulate $\gamma$'s across modes so that some
+``columns'' are shared between modes while others are unique. The $\beta$'s can
+be completely independent, since we don't really care to compare them anyways.
+\item To elaborate, choose $K_{X}, K_{Y}$, and $K_{S}$ for the number of topics
+that are unique to $X$ and $Y$ and shared ($S$). For the first $K_{S}$, we can
+simulate mixed memberships $\gamma_{k}^{X} \equiv \gamma_{k}^{Y}$. For the
+remaining $K_{X}$ topics in $X$, we simulate $\gamma_{k}^{X}$ without regard to
+$Y$ (and vice versa).
+\item How can we tie together the $\gamma_{k}$'s for shared indices? A simple
+approach is to use a stick breaking construction. For $k \leq K_{S}$, we
+simulate,
+\begin{align*}
+\gamma_{k} &:= v_{k}\prod_{k^{\prime} < k} \left(1 - v_{k^{\prime}}\right) \\
+v_{k} &\sim \text{Beta}\left(1, \alpha\right),
+\end{align*}
+and we set $\gamma_{k}^{X} = \gamma_{k}^{Y} = \gamma_{k}$. For the remaining
+topics within the $X$ modality, we draw from
+\begin{align*}
+\gamma_{k} &:= v_{k}\prod_{k^{\prime} = 1}^{K_{S}}\left(1 - v_{k^{\prime}}\right)\prod_{k^{x} = K_{S} + 1}^{k - 1}\left(1 - v_{k^{x}}\right) \\
+v_{k^{x}} &\sim \text{Beta}\left(1, \alpha\right),
+\end{align*}
+and similarly for mode $Y$.
+\item The interpretation of the process above is that we take a stick and break
+off $K_{S}$ parts, whose lengths correspond to the $\gamma_{k}$'s for the shared
+topics. We then clone whatever is left of the stick, so there is one stick per
+each mode. Those remaining sticks are then broken independently via the same
+mechanism.
+\item A downside of Strategy 1 is that it doesn't evaluate our ability to search
+for ``soft'' matchings between topics across modes. The shared topics in one
+mode can be perfectly matched to the shared topics in the other.
+\end{enumerate}
+
