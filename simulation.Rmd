@@ -60,8 +60,50 @@ where $\exp{}$ is applied elementwise.
 
 # What does strategy 2 look like?
 
-Here is an R simulation.
+```{r}
+library("dplyr")
+library("ggplot2")
+library("ggrepel")
+library("purrr")
+library("tidyr")
+source("simulation_functions.R")
+set.seed(123)
+theme_set(theme_minimal())
+```
 
+```{r}
+n_lev <- 3
+tree <- generate_tree(n_lev)
+tree
+```
+
+```{r}
+ggplot(tree, aes(x = level, y = time)) +
+  geom_segment(aes(xend = level - 1, yend = parent_time)) +
+  geom_point() +
+  geom_text_repel(aes(label = node))
+```
+```{r}
+topics <- tree_topics(tree)
+head(topics)
+```
+
+
+```{r}
+cbind(tree, topics) %>%
+  pivot_longer(cols = c(`1`:`10`), names_to = "v") %>%
+  ggplot() +
+  geom_tile(aes(x = v, fill = value, y = node), stat = "identity") +
+  facet_grid(level ~ ., scale = "free_y", space = "free") +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_fill_gradient(low = "white", high = "black") +
+  theme(panel.margin=unit(.05, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1), 
+        strip.background = element_rect(color = "black", size = 1),
+        axis.text.y = element_blank()
+      )
+```
 
 # Multimodal simulation
 
@@ -99,3 +141,7 @@ for ``soft'' matchings between topics across modes. The shared topics in one
 mode can be perfectly matched to the shared topics in the other.
 \end{enumerate}
 
+```{r}
+gammas <- multimodal_gammas(100, c(3, 3),c(3, 3), k_shared = 4, alpha_shared = 3)
+map(gammas, head)
+```
