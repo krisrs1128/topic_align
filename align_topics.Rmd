@@ -17,7 +17,9 @@ We aim at developing a method to align and compare topics when
 
 (2) hyper-parameters of LDA are changed (e.g. varying alpha)
 
-(3) different modalities [? is there a better term than "modality" ?] exists for the same documents. For example, the same set of documents exists in different languages but we don't have a direct translation of each word. Or, more commonly encountered in biology, the same samples have been analyzed for different -omics information, _e.g._ metagenomic or transcriptomic, and there is a desire to compare the topics from these different domains.
+(3) different modalities [? is there a better term than "modality" ?] exist for the same documents. For example, the same set of documents exists in different languages but we don't have a direct translation of each word. Or, more commonly encountered in biology, the same samples have been analyzed for different -omics information, _e.g._ metagenomic or transcriptomic, and there is a desire to compare the topics from these different domains.
+
+(4) different datasets composed of different documents exist with the same modality, i.e. the same words are present in both datasets. For example, one dataset is the collection of articles from The New York Times and the other dataset is the collection of articles from The Guardian and we wish to compare the topics identified in these two datasets. In microbiome biology, we may want to compare topics obtained from two different cohorts. For example, the vaginal microbiome composition of pregnant (cohort 1) and non-pregnant (cohort 2) women has been measured by rRNA 16S sequencing and we want to compare the communities identified in these two cohorts.
 
 
 # Notations
@@ -51,25 +53,31 @@ In order words, an LDA finds topics such that each document is optimally describ
 
 # Aligning topics.
 
-For objectives (1) and (2), we can align topics using the $\beta$ matrices from each model $m$, while for objective (3), only matrix $\gamma$ can be used to align topics.
+For objectives (1) and (2), we can align topics either using the $\beta$ or the $\gamma$ matrices from each model $m$. For objective (3), only matrix $\gamma$ can be used to align topics and for objective (4) only matrix $\beta$ can be used.
 
-We will thus first consider the problem of aligning topics using the $\gamma$ matrices, then consider the "inverse" problem of aligning topics using the $\beta$ matrices and discuss similarities and differences.
+We will first consider the problem of aligning topics using the $\gamma$ matrices, then consider the twin problem of aligning topics using the $\beta$ matrices and discuss similarities and differences.
 
-In both case, in addition to aligning topics between successive models (_e.g._ successive values of K or $alpha$, or manually ordered modalities), we are also interested in computing and visualizing the alignment between each model and a reference model $m^R$.
+In both case, in addition to aligning topics between successive models (_e.g._ successive values of K or $alpha$, or manually ordered modalities or samples), we are also interested in computing and visualizing the alignment between each model.
 
 ## Aligning topics based on the $\gamma$ matrices
 
-First, each document $d$ is assigned a topic of reference $k_R$ which is defined as the topic of the reference model $m_R$ with the largest proportion for this document: $k^R_d = \arg \max \gamma_{d,k^R}$.
+The alignment based on the $\gamma$ matrices is a simpler problem than the alignment based on the $\beta$ matrices because we can assign a mass to each document and compute how the mass of each document is transferred between topics of a first model and topics of a second model, since the $\gamma$ elements can be interpreted as the distribution of mass from each document between the topics.
 
+To compute the alignment based on the $\gamma$ matrices, we simply compute the proportion of mass transferred between each topic of successive models as $w^{\gamma}_{k^m, k^{m+1}} = \frac{1}{D} \sum_{d}^D \gamma_{d,k^m} \ \gamma_{d, k^{m+1}}$.
 
-We then compute the proportion of mass transferred between each topic of successive models as $w^{\gamma}_{k^m, k^{m+1}} = \frac{1}{D} \sum_{d}^D \gamma_{d,k^m} \ \gamma_{d, k^{m+1}}$
+Consequently, the "height" (or total mass) of each topic $h_{k^m}$ is $h_{k^m} = \sum_d \gamma_{d,k^m}$. Topics that are the main topics of many documents have a larger "height" that topics that are secondary topics of many documents or the main topic of few documents.
 
-And if we desire to split these weights by reference topics, we have $w^{\gamma}_{k^m, k^{m+1},k^R} = \frac{1}{D^R} \sum_d^{D^R} \ \gamma_{d,k^m} \ \gamma_{d, k^{m+1}} $.
+And if we desire to split these weights by topics of a reference model, 
+we can assign each document $d$ to topic of reference $k_R$. This topic of reference is defined as the topic of the reference model $m_R$ with the largest proportion for this document: $k^R_d = \arg \max \gamma_{d,k^R}$.
 
-Consequently, the "height" of each topic $h_{k^m}$ is $h_{k^m} = \sum_d \gamma_{d,k^m}$. Topics that are the main topics of many documents have a larger "height" that topics that are secondary topics of many documents or the main topic of few documents.
+Then, the alignment becomes $w^{\gamma}_{k^m, k^{m+1},k^R} = \frac{1}{D^R} \sum_d^{D^R} \ \gamma_{d,k^m} \ \gamma_{d, k^{m+1}} $.
 
 
 ## Aligning topics based on the $\beta$ matrices
+
+Aligning topics based on the $\beta$ matrices is more complex as it requires to optimize (instead of merely compute) the mass transfer between topics. That is because there is no clear concept of mass conservation between the topics in the absence of document.
+
+[NOTE: what follows in this section will change - it's probably not useful]
 
 To align topics based on the distribution of word probability in these topics, we first define the following concepts:
 
@@ -79,24 +87,16 @@ To align topics based on the distribution of word probability in these topics, w
 
 - the "reference topic height" in each topic: $h_{k^m, k^R} = \sum_w^{W^R} f_w \  \beta_{w,k^m}$
 
-[NOTE: these definitions are sufficient to draw the composition of each topic for each $m$, but to draw the flow between the topics, we need to find the optimal mass transfer - I kept writing down my notes, but it's not super useful and it's not implemented, instead, I implemented something a little ugly for the visualization of the flows]
-
-- the "word height" in each topic: $h_{w, k^m} = \beta_{w,k^m} \ h_{k^m}$
-
-- the modeled "word height" over all topics: XXXX
-
-
+[These definitions are sufficient to draw the composition of each topic for each $m$, but to draw the flow between the topics, we need to find the optimal mass transfer]
 
 
 # Implementation
 
 We have implemented the methods described above in a series of functions which can be ran sequentially:
 
-- `run_LDA_models`, which runs the LDA models for a specified set of $K$s, $\alpha$s or modalities.
+- `run_LDA_models`, which runs the LDA models for a specified set of $K$s, $\alpha$s, modalities or datasets. [NOTE:so far, it's only implemented for K]
 
-- (optional) `trim_LDA_models` filter the $\beta$ matrix to keep only $N$ (set by user) words or words with a probability of at least $p_{min}$ (set by users) in any topic.
-
-- `align_topics` performs the topic alignment on the $\gamma$ matrices and re-order the topics so that most align topics are "close to each others" [not sure how to formulate this]. Then, if possible, this function computes the alignment based on the $\beta$ matrices [honestly, the solution with the $\gamma$ is so elegant, easy and can be applied to any case, that I wonder if it's even worth trying to do the alignment based on the $\beta$ matrix. Let's talk :)]. If a reference model is not provided, the last model is used as a reference.
+- `align_topics` performs the topic alignment on the $\gamma$ and/or the $\beta$ matrices when possible  [NOTE: only the alignment based on $\gamma$ is implemented] and re-order the topics so that most align topics are "close to each others" [not sure how to formulate this]. If a reference model is not provided, the last model is used as a reference.
 
 - `visualize_topic_alignment` computes the visualization layout and return a ggplot object with the alignment flow between topics.
 

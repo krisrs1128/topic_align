@@ -181,7 +181,7 @@ align_topics = function(data, lda_models, m_ref = NULL, order_constrain = NULL){
   # 2. re-order topics based on the topic alignment
   topics_order = 
     .order_topics(
-      aligned_topics = aligned_topics_gamma) # , order_constrain = order_constrain
+      aligned_topics = aligned_topics_gamma, order_constrain = order_constrain)
   
   # we add the new order for the topics to lda_models...
   lda_models$gammas = 
@@ -281,11 +281,10 @@ align_topics = function(data, lda_models, m_ref = NULL, order_constrain = NULL){
   W
 }
 
-
-
 .order_topics = 
   function(
-    aligned_topics
+    aligned_topics,
+    order_constrain = NULL
   ){
     
     M = levels(aligned_topics$m)
@@ -295,48 +294,184 @@ align_topics = function(data, lda_models, m_ref = NULL, order_constrain = NULL){
       aligned_topics %>% 
       group_by(m, k_LDA, k_LDA_next) %>% 
       summarize(weight = sum(w), .groups = "drop")
-
-    ordered_topics = 
-      aligned_topics_summ %>% 
-      filter(m == M[1]) %>% 
-      select(m, k_LDA) %>% 
-      distinct() %>% 
-      arrange(k_LDA) %>% 
-      mutate(k = row_number())
     
-    for(this_m in M[-1]){
-        
-        this_m = this_m %>% factor(., levels = levels(M))
-        prev_m = next_level(this_m, n = -1)
-        
-        these_topics = 
-          aligned_topics_summ %>% 
-          filter(m == prev_m) %>% 
-          left_join(., 
-                    ordered_topics %>% 
-                      filter(m == prev_m),
-                    by = c("m","k_LDA")
-          )
-        
-        this_topic_order = 
-          these_topics %>% 
-          arrange(k_LDA_next, -weight) %>% 
-          group_by(k_LDA_next) %>% 
-          slice_head() %>% 
-          arrange(k, -weight) %>% 
-          ungroup() %>% 
-          select(k_LDA_next) %>% 
-          dplyr::rename(k_LDA = k_LDA_next) %>%
-          mutate(m = this_m, 
-                 k = row_number())
-        
-        ordered_topics =
-          bind_rows(ordered_topics, this_topic_order)
-        
-      }
+    if(is.null(order_constrain)){
+      order_constrain = 
+        aligned_topics_summ %>% 
+        filter(m == M[1]) %>% 
+        select(m, k_LDA) %>% 
+        distinct() %>% 
+        arrange(k_LDA) %>% 
+        mutate(k = row_number())
+    }else{
+      # check provided order_constrain
+      # 1. should have columns m, k_LDA, k
+      # 2. m should be unique and one of M
+      # 3. k_LDA should be distinct and matching the k_LDA of aligned_topic_summ for the same m
+      # 4. k should be distinct integers from 1:n(k_LDA)
+    }
+    
+    upward_order = .order_upward(order_constrain = order_constrain, aligned_topics = aligned_topics_summ)
+    downward_order = .order_downward(order_constrain = order_constrain, aligned_topics = aligned_topics_summ)
+    
+    ordered_topics = 
+      bind_rows(downward_order,
+                upward_order) %>% 
+      distinct() %>% 
+      arrange(m, k_LDA, k)
     
     ordered_topics
+    
   }
+
+
+
+.order_upward = function(order_constrain, aligned_topics){
+  
+  ordered_topics = order_constrain
+  
+  M = levels(aligned_topics$m) %>%  factor(., levels = levels(aligned_topics$m))
+  j = which(ordered_topics$m[1] == M)
+  if(j == length(M)) return(ordered_topics)
+  M_to_align = M[(j+1):length(M)]
+  
+  for(this_m in M_to_align){
+    
+    this_m = this_m %>% factor(., levels = levels(M))
+    prev_m = next_level(this_m, n = -1)
+    
+    these_topics = 
+      aligned_topics %>% 
+      filter(m == prev_m) %>% 
+      left_join(., 
+                ordered_topics %>% 
+                  filter(m == prev_m),
+                by = c("m","k_LDA")
+      )
+    
+    this_topic_order = 
+      these_topics %>% 
+      arrange(k_LDA_next, -weight) %>% 
+      group_by(k_LDA_next) %>% 
+      slice_head() %>% 
+      arrange(k, -weight) %>% 
+      ungroup() %>% 
+      select(k_LDA_next) %>% 
+      dplyr::rename(k_LDA = k_LDA_next) %>%
+      mutate(m = this_m, 
+             k = row_number())
+    
+    ordered_topics =
+      bind_rows(ordered_topics, this_topic_order)
+    
+  }
+  
+  ordered_topics
+  
+}
+
+
+
+.order_downward = function(order_constrain, aligned_topics){
+  
+  ordered_topics = order_constrain
+  
+  M = levels(aligned_topics$m) %>%  factor(., levels = levels(aligned_topics$m))
+  j = which(ordered_topics$m[1] == M)
+  if(j == 1) return(ordered_topics)
+  M_to_align = M[(j-1):1]
+  
+  for(this_m in M_to_align){
+    
+    this_m = this_m %>% factor(., levels = levels(M))
+    next_m = next_level(this_m, n = 1)
+    
+    these_topics = 
+      aligned_topics %>% 
+      filter(m == this_m) %>% 
+      left_join(., 
+                ordered_topics %>% 
+                  filter(m == next_m) %>% 
+                  mutate(m = this_m) %>% 
+                  dplyr::rename(k_LDA_next = k_LDA,
+                                k_next = k),
+                by = c("m","k_LDA_next")
+      )
+    
+    this_topic_order = 
+      these_topics %>% 
+      arrange(k_LDA, -weight) %>% 
+      group_by(k_LDA) %>% 
+      slice_head() %>% 
+      arrange(k_next, -weight) %>% 
+      ungroup() %>% 
+      select(m, k_LDA) %>% 
+      mutate(k = row_number())
+    
+    ordered_topics =
+      bind_rows(ordered_topics, this_topic_order)
+    
+  }
+  
+  ordered_topics
+}
+
+
+
+# .order_topics = 
+#   function(
+#     aligned_topics
+#   ){
+#     
+#     M = levels(aligned_topics$m)
+#     M = M %>% factor(., levels = M)
+#     
+#     aligned_topics_summ = 
+#       aligned_topics %>% 
+#       group_by(m, k_LDA, k_LDA_next) %>% 
+#       summarize(weight = sum(w), .groups = "drop")
+# 
+#     ordered_topics = 
+#       aligned_topics_summ %>% 
+#       filter(m == M[1]) %>% 
+#       select(m, k_LDA) %>% 
+#       distinct() %>% 
+#       arrange(k_LDA) %>% 
+#       mutate(k = row_number())
+#     
+#     for(this_m in M[-1]){
+#         
+#         this_m = this_m %>% factor(., levels = levels(M))
+#         prev_m = next_level(this_m, n = -1)
+#         
+#         these_topics = 
+#           aligned_topics_summ %>% 
+#           filter(m == prev_m) %>% 
+#           left_join(., 
+#                     ordered_topics %>% 
+#                       filter(m == prev_m),
+#                     by = c("m","k_LDA")
+#           )
+#         
+#         this_topic_order = 
+#           these_topics %>% 
+#           arrange(k_LDA_next, -weight) %>% 
+#           group_by(k_LDA_next) %>% 
+#           slice_head() %>% 
+#           arrange(k, -weight) %>% 
+#           ungroup() %>% 
+#           select(k_LDA_next) %>% 
+#           dplyr::rename(k_LDA = k_LDA_next) %>%
+#           mutate(m = this_m, 
+#                  k = row_number())
+#         
+#         ordered_topics =
+#           bind_rows(ordered_topics, this_topic_order)
+#         
+#       }
+#     
+#     ordered_topics
+#   }
 
 
 visualize_aligned_topics = 
@@ -346,7 +481,8 @@ visualize_aligned_topics =
     add_leaves = TRUE,
     min_beta = 0.025,
     n_words = NULL,
-    add_words_labels = TRUE
+    add_words_labels = TRUE,
+    reverse_x_axis = FALSE
   ){
     
   color_by = color_by[1]
@@ -401,7 +537,6 @@ visualize_aligned_topics =
       aes(x = x, ymin = ymin, ymax = ymax, group = flow_id, fill = k_ref),
       alpha = 0.5
     ) +
-    scale_x_continuous(breaks = M_nums, minor_breaks = NULL, labels = M) +
     scale_y_continuous(breaks = NULL) +
     xlab("models") +
     ylab("topic composition")
@@ -415,10 +550,16 @@ visualize_aligned_topics =
                     y = y,
                     label = w, 
                     col = k_ref),
-                hjust = 0, size = 3) +
+                hjust = ifelse(reverse_x_axis,1,0), size = 3) +
       guides(col = FALSE) +
       expand_limits(x = max(leaves_layout$text$m_num) + longuest_word/5)
       coord_cartesian(clip = 'off')
+  }
+  
+  if(reverse_x_axis){
+    g = g + scale_x_reverse(breaks = M_nums, minor_breaks = NULL, labels = M)
+  }else{
+    g = g + scale_x_continuous(breaks = M_nums, minor_breaks = NULL, labels = M)
   }
   
   g
@@ -618,7 +759,7 @@ visualize_aligned_topics =
     ref_topic_for_each_word %>% 
     left_join(., est_average_freq, by = "w") %>% 
     mutate(m = "words",
-           m_num = length(levels(aligned_topics$gamma_alignment$m))+1 + 0.5,
+           m_num = length(levels(aligned_topics$gamma_alignment$m))+1 + 1,
            cum_f = cumsum(f),
            y = - (k_ref + row_number() - 1)*delta - cum_f + f/2,
            height = f,
@@ -662,7 +803,7 @@ visualize_aligned_topics =
                 select(w, k_ref_w, w_index), 
               by = "w") %>% 
     arrange(w_index, k_ref) %>% 
-    mutate(x = m_ref %>% as.numeric() + 0.8 + 0.5,
+    mutate(x = m_ref %>% as.numeric() + 0.8 + 1,
            cum_h = cumsum(h),
            ymin = - delta * (k_ref_w + w_index - 1) - cum_h,
            ymax = ymin + h)
