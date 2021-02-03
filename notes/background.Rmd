@@ -97,7 +97,7 @@ transport cost,
 \min_{\*{P} \in \mathcal{U}\left(\*a, \*b\right)} \left< \*{C}, \*{P}\right>
 \end{align}
 
-where we have defined the set of appropriate plans by 
+where we have defined the set of appropriate plans by
 
 \begin{align*}
 \mathcal{U}\left(\*a, \*b\right) := \{\*{P} \in \*{R}^{n \times m}_{+} : \*{P}\*{1}_{m} = \*{a} \text { and } \*{P}\*{1}_{n} = \*{b}\}.
@@ -186,7 +186,7 @@ links <- merge_link_data(sink_res$P, masses)
 ```{r, fig.height = 3, fig.width = 4}
 ggplot() +
   geom_segment(
-    data = links, 
+    data = links,
     aes(x = V1.x, xend = V1.y, y = V2.x, yend = V2.y, alpha = log(value)),
     size = 1, col = "#d3d3d3"
     ) +
@@ -219,4 +219,68 @@ where we apply the soft-minimum,
 \end{align*}
 row and column-wise, for $\text{rowmin}_{\epsilon}$ and
 $\text{colmin}_{\epsilon}$, respectively.
+\end{enumerate}
+
+# Mass Transport for Topics
+
+In this section, we tailor the general language of mass transport to the topic
+alignment setting.
+
+\begin{enumerate}
+\item Consider Kantorovich's mines and factories analogy. The key pieces of
+information in that analogy were (i) the amount of material present at the
+mines, (ii) the amount of material required by the factories, and (iii) the cost
+of moving 1 unit of material between any mine-factory pair.
+\item We differentiate between two cases, alignment of topics based on columns
+($\beta$'s) and rows ($\gamma$'s). In alignment based on columns, the mines are
+a set of source topics on the $V$-dimensional simplex,
+\begin{align*}
+\m\beta^{1}_{1}, \dots, \m\beta^{1}_{K_{1}} \in \simplex^{V},
+\end{align*}
+and the factories are a different set of topics on the same simplex,
+\begin{align*}
+\m\beta^{2}_{1}, \dots, \m\beta^{2}_{K_{2}} \in \simplex^{V}.
+\end{align*}
+For example, we imagine the two sets of topics are the result of fitting topic
+models with different values of $K$.
+\item The cost of transporting material from mines to factories is determined by
+the distance between them. One natural distance is the total variation distance,
+$d\left(\m\beta_{k}, \m\beta_{k}^{\prime}\right) = \|\m\beta_{k} -
+\m\beta_{k^{\prime}}\|_{1}$. An alternative distance on the simplex is the
+chi-square distance,
+\begin{align*}
+d\left(\m\beta_{k}, \m\beta_{k^\prime}\right) &= \left(\m\beta_{k} - \m\beta_{k^{\prime}}\right)^{T}D^{-1}\left(\m\beta_{k} - \m\beta_{k^{\prime}}\right)
+\end{align*}
+where $D$ is a diagonal matrix with $v^{th}$ entry $\frac{1}{2K}\sum_{j =
+1}^{2}\sum_{k = 1}^{K}\beta^{j}_{kv}$. This is an adaptation of equation (2.1)
+from \href{https://web.stanford.edu/~hastie/Papers/GreenacreCA.pdf}{this paper}.
+\item To specify the amount of material at mines / required by factories,
+imagine that mine $k$ produces $n$ ``batches'' of material $\gamma_{ik}$ and
+that factory $k^{\prime}$ requires a total of $\sum_{i}\gamma_{ik^{\prime}}$.
+That is, associate each topic $\m\beta_{k}^{j}$ with mass $\sum_{i}\gamma_{ik}$.
+\item Next, consider alignment based on rows. Now, the mines and factories are
+points $\m\gamma^{j}_{k} \in \left[0, 1\right]^{n}$. Being close to 1 in the
+$i^{th}$ dimension means that the $i^{th}$ observation has a high weight for
+that topic. We are using $j$ to index the different sets of topics.
+\item For the transport cost, we can use the euclidean distance,
+\begin{align*}
+d\left(\m\gamma_{k}, \m\gamma_{k^{\prime}}\right) &= \|\m\gamma_{k} - \m\gamma_{k^{\prime}}\|_{2},
+\end{align*}
+because I don't see any reason to treat the $n$-dimensional unit cube any
+differently from $\reals^{n}$.
+\item For the amount of material, I suggest associating each $\m\gamma_{k}$ with
+the same mass. The reasoning is complementary to the problem above, where the
+mass was $\sum_{i}\gamma_{ik}$. The analogous quantity is $\sum_{v}\beta_{kv} =
+1$ for any $k$.
+\item Note that this provides a geometric interpretation of the difference
+between aligning using transport and using
+$\sum_{i}\gamma_{ik}\gamma_{ik^{\prime}}$'s. The transport approach considers
+two $\m\gamma_{k}$'s similar if they are close in euclidean distance, while
+$\sum_{i} \gamma_{ik}\gamma_{ik^{\prime}}$ compares something like an angle, but
+which is more lenient when comparing points near the $1$ corner of $\left[0,
+1\right]^{n}$, since it's easier for them to have high alignment. To call points
+similar just using their angle, it would be necessary to first normalize,
+\begin{align*}
+\text{sim}\left(\m\gamma_{k}, \m\gamma_{k^{\prime}}\right) = \frac{\m\gamma_{k}^{T}\m\gamma_{k^{\prime}}}{\|\m\gamma_{k}\|_{2}\|\m\gamma_{k^{\prime}}\|_{2}}
+\end{align*}
 \end{enumerate}
