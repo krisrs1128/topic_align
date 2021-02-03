@@ -67,7 +67,6 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
   
   used_up <- rowSums(gamma_shared)
   gammas <- map(ks, ~ matrix(0, n, . - 1))
-  print(dim(gammas[[1]]))
   for (j in seq_along(gammas)) {
     for (i in seq_len(n)) {
       v <- rbeta(ks[j], 1, alphas[j])
@@ -80,4 +79,17 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
   
   map(gammas, ~ cbind(gamma_shared, .)) %>%
     map(~ cbind(., 1 - rowSums(.)))
+}
+
+simulate_lda <- function(betas, gammas, n0=NULL) {
+  n <- nrow(gammas)
+  if (is.null(n0)) {
+    n0 <- rpois(n, 1000)
+  }
+  
+  x <- matrix(nrow = n, ncol = ncol(betas))
+  for (i in seq_len(n)) {
+    x[i, ] <- rmultinom(1, n0, t(betas) %*% thetas[i, ])
+  }
+  x  
 }
