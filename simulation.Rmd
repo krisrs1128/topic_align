@@ -6,7 +6,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
 ```
 
 \begin{enumerate}
@@ -29,7 +29,7 @@ study. I'd like to argue that none of the choices of $K$ are correct, but that
 we can be informed about what trade-offs are involved between different choices.
 \end{enumerate}
 
-# Strategy 2: Branching process-inspired
+# Strategy 2: Branching $\beta$'s
 \begin{enumerate}
 \item For this reason, a more complex setup might be useful. The idea in this
 strategy is to simulate topics that branch off from one another over time. We
@@ -61,11 +61,16 @@ where $\exp{}$ is applied elementwise.
 # What does strategy 2 look like?
 
 ```{r}
+library("MCMCpack")
 library("dplyr")
 library("ggplot2")
 library("ggrepel")
+library("magrittr")
 library("purrr")
+library("stringr")
 library("tidyr")
+library("topicmodels")
+source("align_topic_functions.R")
 source("simulation_functions.R")
 set.seed(123)
 theme_set(theme_minimal())
@@ -74,35 +79,76 @@ theme_set(theme_minimal())
 ```{r}
 n_lev <- 3
 tree <- generate_tree(n_lev)
-tree
+topics <- tree_topics(tree)
 ```
 
-```{r}
+```{r, fig.cap = "A simulated tree. Larger jumps in time will lead to larger differences between parent and child topics."}
 ggplot(tree, aes(x = level, y = time)) +
-  geom_segment(aes(xend = level - 1, yend = parent_time)) +
+  geom_segment(aes(xend = level - 1, yend = parent_time), col = "#d3d3d3") +
   geom_point() +
   geom_text_repel(aes(label = node))
 ```
-```{r}
-topics <- tree_topics(tree)
-head(topics)
-```
 
-
-```{r}
+```{r, fig.cap = "Topics associated with tree nodes, at the three simulated levels (plus root). Notice that neighboring rows tend to have similar b[k,v]'s.", echo = FALSE, fig.height = 3.5, fig.width = 3.3}
 cbind(tree, topics) %>%
   pivot_longer(cols = c(`1`:`10`), names_to = "v") %>%
   ggplot() +
-  geom_tile(aes(x = v, fill = value, y = node), stat = "identity") +
+  geom_tile(aes(x = v, fill = value, y = as.factor(node)), stat = "identity") +
   facet_grid(level ~ ., scale = "free_y", space = "free") +
-  scale_y_continuous(expand = c(0, 0)) +
+  labs(x = "word", y = "Tree Node") +
+  scale_y_discrete(expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_fill_gradient(low = "white", high = "black") +
-  theme(panel.margin=unit(.05, "lines"),
-        panel.border = element_rect(color = "black", fill = NA, size = 1), 
-        strip.background = element_rect(color = "black", size = 1),
-        axis.text.y = element_blank()
-      )
+  theme(
+    panel.spacing=unit(.05, "lines"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    strip.background = element_rect(color = "black", size = 1),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+# Counts from Branching $\beta$'s
+
+\begin{enumerate}
+\item Given these $\beta$'s, we can simulate a dataset of counts $\*X\in
+\reals^{n \times V}$. We simulate $\gamma_{i} \sim \text{Dir}\left(\alpha
+\*1_{K}\right)$ and then draw $\*x_{i} \sim \text{Mult}\left(n_{0},
+B\gamma_{i}\right)$ where $B \in \reals^{V \times K}$ concatenates all the
+topics horizontally.
+\item A larger $\alpha$ creates $\gamma_{i}$'s across the full polytope whose
+corners are $\beta_{k}$. Smaller $\alpha$ encourages $\gamma_{i}$ to concentrate
+at corners or edges of this polytope. The choice of $\alpha$ basically
+interpolates between gradient and clustering structure. Since it seems easier to
+recover hierarchical structure in the more clustered setting, we choose $\alpha
+= 0.1$.
+\end{enumerate}
+
+```{r}
+leaves <- cbind(tree, topics) %>%
+  filter(level == 3) %>%
+  dplyr::select(`1`:`10`)
+n <- 100
+gamma <- rdirichlet(n, alpha = rep(0.1, nrow(leaves)))
+x <- simulate_lda(leaves, gamma)
+fits <- run_lda_models(x, c(3, 6), c(.1), "VEM", 123)
+```
+
+```{r, fig.cap = "Example fitted topics, from the branching scenario.", echo = FALSE, fig.width = 4, fig.height = 3}
+ggplot(fits$betas, aes(x = w, y = as.factor(k_LDA), fill = b)) +
+  geom_tile() +
+  facet_grid(m ~ ., scale = "free", space = "free") +
+  labs(x = "word", y = "topic") +
+  scale_y_discrete(expand = c(0, 0)) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_fill_gradient(low = "white", high = "black") +
+  theme(
+    panel.spacing=unit(.05, "lines"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    strip.background = element_rect(color = "black", size = 1),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
 ```
 
 # Multimodal simulation

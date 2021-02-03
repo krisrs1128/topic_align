@@ -89,7 +89,9 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
   
   x <- matrix(nrow = n, ncol = ncol(betas))
   for (i in seq_len(n)) {
-    x[i, ] <- rmultinom(1, n0, t(betas) %*% thetas[i, ])
+    x[i, ] <- rmultinom(1, n0, t(betas) %*% gammas[i, ])
   }
-  x  
+  rownames(x) <- seq_len(n)
+  colnames(x) <- seq_len(ncol(betas))
+  x
 }
