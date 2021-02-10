@@ -1,0 +1,169 @@
+# Experiments with refinements
+
+```{r workflow-demo-libraries}
+
+# Libraries to attach
+library(tidyverse)
+library(magrittr)
+library(topicmodels)
+library(slam)
+library("topicvis")
+library("cowplot")
+
+## load the topic alignment functions
+source("../align_topic_functions.R")
+## viz default theme
+theme_set(theme_minimal())
+
+```
+
+## Refinements on k-means clustering data
+
+I want to start off with some simulations where it's really easy to see what's going on so that we can gain better intuition about the things we're estimating.
+I'm going to use the simulations that Kris set up in a previous repo.
+There are two different situations here: the first is a set of four very distinct clusters, and the second is just a set of draws from a bivariate normal distribution.
+We can see them below, along with the $k$-means solutions for $k$ between 2 and 8.
+
+```{r, fig.width=8, fig.height=6,dpi=200}
+set.seed(0)
+n <- 400
+mu0 <- c(0, 0)
+mu1 <- c(5, 5)
+x <- list()
+x$smooth <- simulate_gradient(n, mu0, mu1)
+mus <-  matrix(rnorm(10, sd = 10), ncol = 2)
+x$cluster <- simulate_cluster(n, mus)
+links <- list(
+  "cluster" = linked_cluster_data(x$cluster),
+  "smooth" = linked_cluster_data(x$smooth)
+)
+p1 <- ggplot(links$cluster$centroids) +
+  geom_point(data = data.frame(x$cluster), aes(x = X1, y = X2), size = 0.2) +
+  geom_point(aes(x = X1, y = X2), col = "red", size = 1) +
+  coord_fixed() +
+  facet_wrap(~K)
+
+p2 <- ggplot(links$smooth$centroids) +
+  geom_point(data = data.frame(x$smooth), aes(x = X1, y = X2), size = 0.2) +
+  geom_point(aes(x = X1, y = X2), col = "red", size = 1) +
+  coord_fixed() +
+  facet_wrap(~K)
+plot_grid(p1, p2)
+```
+
+Once we have the clustering solutions in each case, we can look at what the estimates for refinements are.
+For now, I'm just using least squares to estimate refinements instead of something fancier.
+That is, if $C_i$ is an indicator matrix of samples x clusters, then the refinement for $C_1$ and $C_2$ is estimated as being the matrix $R$ that minimizes $\| C_1 - C_2 R\|_2^2$.
+I haven't written it out, but it seems that with this way of estimating $R$, we always get $\hat R$ with row sums equal to 1.
+For hard clustering, I've also always had $R_{ij} \in [0,1]$ (this hasn't been true for the soft clustering that we have for LDA).
+
+We can look at what happens with the refinements when we try it on the cluster-simulated data.
+We see that in this case, we usually see that $R$ is a matrix with only 0's and 1's, and it corresponds exactly to the refinement structure that we see by eye.
+```{r}
+make_refinements_from_cluster_data = function(cluster_data, k1, k2) {
+    C1 = cluster_data$groups %>%
+        round() %>%
+        subset(K == k1) %>%
+        pivot_wider(names_from = cluster, id_cols = ix, values_from = K, values_fill = 0, values_fn = function(x) 1)
+    C2 = cluster_data$groups %>%
+        round() %>%
+        subset(K == k2) %>%
+        pivot_wider(names_from = cluster, id_cols = ix, values_from = K, values_fill = 0, values_fn = function(x) 1)
+    C1_m = as.matrix(select(C1, -"ix"))
+    C2_m = as.matrix(select(C2, -"ix"))
+
+    ## refinement matrix estimated by least squares
+    R = solve(t(C2_m) %*% C2_m) %*% t(C2_m) %*% C1_m
+    fit = C2_m %*% R
+    rmse = sqrt(mean((C1_m - fit)^2))
+    return(list(R = R, rmse = rmse))
+}
+
+make_refinements_from_cluster_data(links$cluster, 2, 3)
+make_refinements_from_cluster_data(links$cluster, 2, 4)
+make_refinements_from_cluster_data(links$cluster, 4, 7)
+```
+
+An exception is when we try this for clustering solutions that aren't refinements of each other, for example the solutions $k = 5$/$k = 6$ or $k = 6$/$k = 7$.
+In this case, we get an $\hat R$ that is not all 0's and 1's.
+We also see that the least squares error is substantially higher than in the other two cases.
+```{r}
+make_refinements_from_cluster_data(links$cluster, 5, 6) %>% lapply(round, digits = 2)
+make_refinements_from_cluster_data(links$cluster, 6, 7) %>% lapply(round, digits = 2)
+```
+
+Now we can move on to the smooth-simulated data and see what happens.
+I was a little surprised to see here that we often see numbers close to 1/0 (see $k = 3$/$k = 4$ for example, not just the .99/.97 but the .87/.13).
+In retrospect this makes sense, 
+```{r}
+make_refinements_from_cluster_data(links$smooth, 2, 3) %>% lapply(round, digits = 2)
+make_refinements_from_cluster_data(links$smooth, 3, 4) %>% lapply(round, digits = 2)
+make_refinements_from_cluster_data(links$smooth, 3, 5) %>% lapply(round, digits = 2)
+```
+
+
+
+## Refinements for the VM data
+
+
+We can load and fit LDAs on the VM data using Laura's code:
+
+```{r workflow-demo-load-and-prepare-data}
+load(file = "../vm_16s_data.Rdata", verbose = TRUE)
+new_asv_names =  colnames(vm_16s) %>% 
+  str_split_fixed(., " ", n = 8) %>%
+  as.matrix() %>% .[,c(6, 7, 8)]  %>%
+  as.data.frame() %>% 
+  set_colnames(c("genus","species","strain")) %>% 
+   mutate(short_name = 
+            str_c(genus, " ", 
+                  species %>% str_replace(.,"NA","-")," ",
+                  strain)) %>% 
+  select(short_name) %>% unlist()
+
+j = which(duplicated(new_asv_names))
+new_asv_names[j] = str_c(new_asv_names[j], " (", 1:length(j),")")
+colnames(vm_16s) = new_asv_names
+  
+vm_16s <- slam::as.simple_triplet_matrix(vm_16s %>%  round())
+topic_models_dir = "../lda_models/"
+lda_models = 
+  run_lda_models(
+    data = vm_16s,
+    Ks = 1:13,
+    method = "VEM",
+    seed = 2,
+    dir = topic_models_dir
+  )
+```
+
+We can look at an example of a refinement estimated by least squares:
+```{r}
+k1 = 5; k2 = 6
+C1 = lda_models$gammas %>%
+    subset(K == k1) %>%
+    pivot_wider(id_cols = d, names_from = k_LDA, names_prefix = "topic_", values_from = g)
+
+C2 = lda_models$gammas %>%
+    subset(K == k2) %>%
+    pivot_wider(id_cols = d, names_from = k_LDA, names_prefix = "topic_", values_from = g)
+
+mean(C1$d == C2$d)
+C1_m = as.matrix(C1[,-1])
+C2_m = as.matrix(C2[,-1])
+
+## refinement matrix estimated by least squares
+R = solve(t(C2_m) %*% C2_m) %*% t(C2_m) %*% C1_m
+R %>% round(digits = 2)
+```
+
+We can also check to see whether it seems like putting box constraints on $\hat R$ will help very much.
+It doesn't look like it to me.
+```{r refinement-cvx}
+library(CVXR)
+Rhat = Variable(k2, k1)
+objective = Minimize(sum((C1_m - C2_m %*% Rhat)^2))
+problem = Problem(objective, constraints = list(Rhat >= 0, Rhat <= 1, Rhat %*% rep(1, ncol(Rhat)) == 1))
+result = solve(problem)
+round(result$getValue(Rhat), digits = 2)
+```
