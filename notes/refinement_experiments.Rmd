@@ -101,7 +101,50 @@ make_refinements_from_cluster_data(links$smooth, 3, 4) %>% lapply(round, digits 
 make_refinements_from_cluster_data(links$smooth, 3, 5) %>% lapply(round, digits = 2)
 ```
 
+### Quantifying a refinement "path"
 
+We talked about quantifying a path through a series of clusters instead of just quantifying one cluster to another.
+To me, the most natural way to do this is to multiply the weights for each segment.
+The notation gets very ugly, but suppose that $R^{i \to j}$ is the refinement matrix describing the transition from clustering solution $i$ to clustering solution $j$.
+Then if we want to compute the weight for a path of clusters: cluster $c_1$ in clustering solution $\mathcal C_1$ to cluster $c_2$ in clustering solution $\mathcal C_2$ to $\ldots$ to cluster $c_n$ in clustering solution $\mathcal C_n$, we write
+$$
+\prod_{i=1}^{n-1} R^{\mathcal C_i \to \mathcal C_{i+1}}_{c_{i+1}, c_i}
+$$
+
+This has a reasonable interpretation: if we think of the set of refinements as defining a Markov process where the probability of going from cluster $c_i$ in solution $\mathcal C_i$ to cluster $c_{i+1}$ in $\mathcal C_{i+1}$ is given by the relevant entry in $R^{\mathcal C_i \to \mathcal C_{i+1}}$, then the weight for the path is the same as the probability that a Markov process starting at $c_1$ will follow exactly the specified path.
+
+We can see what this does on our $k$-means data.
+
+```{r}
+make_refinement_sequence = function(cluster_data, k_sequence) {
+    refinement_list = lapply(k_sequence[-length(k_sequence)], function(k)
+        make_refinements_from_cluster_data(cluster_data, k, k+1)$R)
+    return(refinement_list)
+}
+get_path_weights = function(cluster_data, cluster_sequence, k_sequence) {
+    refinement_list = make_refinement_sequence(cluster_data, k_sequence)
+    weights = numeric(length(k_sequence) - 1)
+    for(i in 1:(length(cluster_sequence) - 1)) {
+        c1 = cluster_sequence[i]; c2 = cluster_sequence[i+1]
+        weights[i] = refinement_list[[i]][c2, c1]        
+    }
+    return(prod(weights))
+}
+```
+
+What it looks like on the smooth data:
+```{r}
+make_refinement_sequence(links$smooth, k_sequence = seq(2,5))
+get_path_weights(links$smooth, c('1', '3', '3', '5'), k_sequence = seq(2,5))
+get_path_weights(links$smooth, c('1', '3', '3', '2'), k_sequence = seq(2,5))
+```
+
+And on the clustered data:
+```{r}
+make_refinement_sequence(links$cluster, k_sequence = seq(2, 6))
+get_path_weights(links$cluster, c('1', '2', '2', '5', '5'), k_sequence = seq(2, 6))
+get_path_weights(links$cluster, c('2', '1', '4', '3', '2'), k_sequence = seq(2, 6))
+```
 
 ## Refinements for the VM data
 
