@@ -151,6 +151,66 @@ ggplot(fits$betas, aes(x = w, y = as.factor(k_LDA), fill = b)) +
   )
 ```
 
+\begin{enumerate}
+
+\end{enumerate}
+
+```{r}
+fits$gamma %>%
+    filter(K == Ks[2]) %>%
+    split(.$d) %>%
+    map(~ select(., k_LDA, g)) %>%
+    bind_rows(.id = "d") %>%
+
+```
+```{r}
+```
+
+```{r}
+betas <- list()
+gammas <- list()
+Ks <- unique(fits$betas$K)
+
+for (k in seq_along(Ks)) {
+  betas[[k]] <- fits$betas %>%
+    filter(K == Ks[k]) %>%
+    split(.$k_LDA) %>%
+    map(~ pull(., b)) %>%
+    bind_cols()
+  
+  gammas[[k]] <- fits$gamma %>%
+    filter(K == Ks[k]) %>%
+    split(.$d) %>%
+    map(~ select(., k_LDA, g)) %>%
+    bind_rows(.id = "d")
+}
+
+gammas
+```
+```{r}
+masses <- gammas %>%
+  map(
+    . %>% 
+      group_by(k_LDA) %>% 
+      summarise(total = sum(g))
+  )
+```
+```{r}
+C <- pdist(t(beta_mats[[1]]), t(beta_mats[[2]]))
+C <- as.matrix(C)
+m <- list()
+for (i in seq_along(masses)) {
+  m[[i]] <- matrix(
+    masses[[i]]$total / sum(masses[[i]]$total),
+    ncol = 1
+  )
+  
+}
+
+Sinkhorn(m[[1]], m[[2]], C)
+```
+
+
 # Multimodal simulation
 
 \begin{enumerate}
