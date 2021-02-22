@@ -40,7 +40,7 @@ Further, it would be interesting if the intermediate branches on the tree are
 somehow recovered when estimating with smaller $K$.
 \item How to implement strategy 2, specifically? We can define something
 inductively. Start with a $\mu_{0} = 0$. Given a tree of means, we simulate a
-new leaf node according to 
+new leaf node according to
 \begin{align*}
 \mu_{i} \vert \mu_{\mathcal{P}\left(i\right)} &\sim \Gsn\left(\mu_{i} \vert \mu_{\mathcal{P}\left(i\right)}, T_{\mathcal{P}\left(i\right)} I_{d}\right)
 \end{align*}
@@ -101,7 +101,7 @@ cbind(tree, topics) %>%
   scale_fill_gradient(low = "white", high = "black") +
   theme(
     panel.spacing=unit(.05, "lines"),
-    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
     strip.background = element_rect(color = "black", size = 1),
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank()
@@ -144,7 +144,7 @@ ggplot(fits$betas, aes(x = w, y = as.factor(k_LDA), fill = b)) +
   scale_fill_gradient(low = "white", high = "black") +
   theme(
     panel.spacing=unit(.05, "lines"),
-    panel.border = element_rect(color = "black", fill = NA, size = 1), 
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
     strip.background = element_rect(color = "black", size = 1),
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank()
@@ -168,7 +168,7 @@ fits$gamma %>%
 
 ```{r}
 betas <- list()
-gammas <- list()
+masses <- list()
 Ks <- unique(fits$betas$K)
 
 for (k in seq_along(Ks)) {
@@ -177,24 +177,14 @@ for (k in seq_along(Ks)) {
     split(.$k_LDA) %>%
     map(~ pull(., b)) %>%
     bind_cols()
-  
-  gammas[[k]] <- fits$gamma %>%
-    filter(K == Ks[k]) %>%
-    split(.$d) %>%
-    map(~ select(., k_LDA, g)) %>%
-    bind_rows(.id = "d")
-}
 
-gammas
+  masses[[k]] <- fits$gamma %>%
+    filter(K == Ks[k]) %>%
+    group_by(k_LDA) %>%
+    summarise(total = sum(g))
+}
 ```
-```{r}
-masses <- gammas %>%
-  map(
-    . %>% 
-      group_by(k_LDA) %>% 
-      summarise(total = sum(g))
-  )
-```
+
 ```{r}
 C <- pdist(t(beta_mats[[1]]), t(beta_mats[[2]]))
 C <- as.matrix(C)
@@ -204,7 +194,7 @@ for (i in seq_along(masses)) {
     masses[[i]]$total / sum(masses[[i]]$total),
     ncol = 1
   )
-  
+
 }
 
 Sinkhorn(m[[1]], m[[2]], C)
@@ -214,7 +204,7 @@ Sinkhorn(m[[1]], m[[2]], C)
 # Multimodal simulation
 
 \begin{enumerate}
-\item How can we evaluate alignment of topics learned across modalities? 
+\item How can we evaluate alignment of topics learned across modalities?
 \item Strategy 1: We can simulate $\gamma$'s across modes so that some
 ``columns'' are shared between modes while others are unique. The $\beta$'s can
 be completely independent, since we don't really care to compare them anyways.
