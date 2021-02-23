@@ -95,3 +95,4 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
   colnames(x) <- seq_len(ncol(betas))
   x
 }
+

@@ -1091,7 +1091,78 @@ next_level = function(f, n = 1){
   new_f
 }
 
+###############################################################################
+# Functions for optimal transport alignment
+###############################################################################
+
+widen_betas <- function(betas_long) {
+  betas <- list()
+  Ks <- unique(fits$betas$K)
+  
+  for (k in seq_along(Ks)) {
+    betas[[k]] <- betas_long %>%
+      filter(K == Ks[k]) %>%
+      split(.$k_LDA) %>%
+      map(~ pull(., b)) %>%
+      bind_cols()
+  }
+  
+  setNames(betas, Ks)
+}
+
+gamma_masses <- function(gammas_long) {
+  masses <- list()
+  Ks <- unique(gammas_long$K)
+  for (k in seq_along(Ks)) {
+    masses[[k]] <- fits$gamma %>%
+      filter(K == Ks[k]) %>%
+      group_by(k_LDA) %>%
+      summarise(total = sum(g)) %>%
+      ungroup() %>%
+      mutate(prop = total / sum(total))
+  }
+  
+  setNames(masses, Ks)
+}
 
 
+transport_align_pair <- function(source, target) {
+  C <- pdist(t(source$pos), t(target$pos))
+  m1 <- matrix(source$mass, ncol = 1)
+  m2 <- matrix(target$mass, ncol = 1)
+  sink_res <- Sinkhorn(m1, m2, as.matrix(C))
+  
+  reshape_plan(
+    sink_res$Transportplan, 
+    colnames(source$pos), 
+    colnames(target$pos)
+  )
+}
 
+transport_align <- function(betas, masses) {
+  n_pairs <- length(betas)
+  res <- list()
+  
+  for (i in seq_len(n_pairs - 1)) {
+    source <- list(pos = betas[[i]], mass = masses[[i]]$prop)
+    target <- list(pos = betas[[i + 1]], mass = masses[[i + 1]]$prop)
+    res[[i]] <- transport_align_pair(source, target)
+    
+    # save names of the source and target, for reference
+    res[[i]] <- res[[i]] %>%
+      mutate(
+        k_LDA = names(betas)[i],
+        k_LDA_next = names(betas)[i + 1]
+      ) %>%
+      select(-edge_weight, edge_weight)
+  }
+  
+  bind_rows(res)
+}
 
+reshape_plan <- function(P, source_names, target_names) {
+  data.frame(P) %>%
+    setNames(target_names) %>%
+    mutate(source = source_names) %>%
+    pivot_longer(cols = -source, names_to = "target", values_to = "edge_weight")
+}

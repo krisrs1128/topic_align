@@ -61,11 +61,13 @@ where $\exp{}$ is applied elementwise.
 # What does strategy 2 look like?
 
 ```{r}
+library("Barycenter")
 library("MCMCpack")
 library("dplyr")
 library("ggplot2")
 library("ggrepel")
 library("magrittr")
+library("pdist")
 library("purrr")
 library("stringr")
 library("tidyr")
@@ -131,7 +133,7 @@ leaves <- cbind(tree, topics) %>%
 n <- 100
 gamma <- rdirichlet(n, alpha = rep(0.1, nrow(leaves)))
 x <- simulate_lda(leaves, gamma)
-fits <- run_lda_models(x, c(3, 6), c(.1), "VEM", 123)
+fits <- run_lda_models(x, 3:8, c(.1), "VEM", 123)
 ```
 
 ```{r, fig.cap = "Example fitted topics, from the branching scenario.", echo = FALSE, fig.width = 4, fig.height = 3}
@@ -156,50 +158,24 @@ ggplot(fits$betas, aes(x = w, y = as.factor(k_LDA), fill = b)) +
 \end{enumerate}
 
 ```{r}
-fits$gamma %>%
-    filter(K == Ks[2]) %>%
-    split(.$d) %>%
-    map(~ select(., k_LDA, g)) %>%
-    bind_rows(.id = "d") %>%
-
-```
-```{r}
+betas <- widen_betas(fits$betas)
+masses <- gamma_masses(fits$gammas)
+alignments <- transport_align(betas, masses)
 ```
 
 ```{r}
-betas <- list()
-masses <- list()
-Ks <- unique(fits$betas$K)
-
-for (k in seq_along(Ks)) {
-  betas[[k]] <- fits$betas %>%
-    filter(K == Ks[k]) %>%
-    split(.$k_LDA) %>%
-    map(~ pull(., b)) %>%
-    bind_cols()
-
-  masses[[k]] <- fits$gamma %>%
-    filter(K == Ks[k]) %>%
-    group_by(k_LDA) %>%
-    summarise(total = sum(g))
-}
+alignments %>%
+  filter(edge_weight > 0.02) %>%
+  ggplot() +
+  geom_segment(
+    aes(
+      x = k_LDA, xend = k_LDA_next, 
+      y = source, yend = target, 
+      size = edge_weight, alpha = edge_weight
+    )
+  ) +
+  scale_size(range = c(0, 3))
 ```
-
-```{r}
-C <- pdist(t(beta_mats[[1]]), t(beta_mats[[2]]))
-C <- as.matrix(C)
-m <- list()
-for (i in seq_along(masses)) {
-  m[[i]] <- matrix(
-    masses[[i]]$total / sum(masses[[i]]$total),
-    ncol = 1
-  )
-
-}
-
-Sinkhorn(m[[1]], m[[2]], C)
-```
-
 
 # Multimodal simulation
 
