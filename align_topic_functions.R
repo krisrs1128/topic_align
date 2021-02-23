@@ -1151,10 +1151,10 @@ transport_align <- function(betas, masses) {
     # save names of the source and target, for reference
     res[[i]] <- res[[i]] %>%
       mutate(
-        k_LDA = names(betas)[i],
-        k_LDA_next = names(betas)[i + 1]
+        k = names(betas)[i],
+        k_next = names(betas)[i + 1]
       ) %>%
-      select(-edge_weight, edge_weight)
+      select(-w, w)
   }
 
   bind_rows(res)
@@ -1163,6 +1163,6 @@ transport_align <- function(betas, masses) {
 reshape_plan <- function(P, source_names, target_names) {
   data.frame(P) %>%
     setNames(target_names) %>%
-    mutate(source = source_names) %>%
-    pivot_longer(cols = -source, names_to = "target", values_to = "edge_weight")
+    mutate(k_LDA = source_names) %>%
+    pivot_longer(cols = -k_LDA, names_to = "k_LDA_next", values_to = "w")
 }

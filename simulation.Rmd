@@ -136,8 +136,9 @@ x <- simulate_lda(leaves, gamma)
 fits <- run_lda_models(x, 3:8, c(.1), "VEM", 123)
 ```
 
-```{r, fig.cap = "Example fitted topics, from the branching scenario.", echo = FALSE, fig.width = 4, fig.height = 3}
-ggplot(fits$betas, aes(x = w, y = as.factor(k_LDA), fill = b)) +
+```{r, fig.cap = "Example fitted topics, from the branching scenario.", echo = FALSE, fig.width = 4, fig.height = 6}
+fits$betas$k_LDA_ <- as.factor(fits$betas$k_LDA)
+ggplot(fits$betas, aes(x = w, y = reorder(k_LDA_, desc(k_LDA_)), fill = b)) +
   geom_tile() +
   facet_grid(m ~ ., scale = "free", space = "free") +
   labs(x = "word", y = "topic") +
@@ -148,7 +149,6 @@ ggplot(fits$betas, aes(x = w, y = as.factor(k_LDA), fill = b)) +
     panel.spacing=unit(.05, "lines"),
     panel.border = element_rect(color = "black", fill = NA, size = 1),
     strip.background = element_rect(color = "black", size = 1),
-    axis.text.y = element_blank(),
     axis.ticks.y = element_blank()
   )
 ```
@@ -161,22 +161,17 @@ ggplot(fits$betas, aes(x = w, y = as.factor(k_LDA), fill = b)) +
 betas <- widen_betas(fits$betas)
 masses <- gamma_masses(fits$gammas)
 alignments <- transport_align(betas, masses)
+head(alignments)
 ```
 
 ```{r}
 alignments %>%
-  filter(edge_weight > 0.02) %>%
-  ggplot() +
-  geom_segment(
-    aes(
-      x = k_LDA, xend = k_LDA_next, 
-      y = source, yend = target, 
-      size = edge_weight, alpha = edge_weight
-    )
-  ) +
+  filter(w > 0.02) %>%
+  ggplot(aes(x = k, y = k_LDA_, size = w, alpha = w)) +
+  geom_point() +
+  geom_segment(aes( xend = k_next, yend = k_LDA_next)) +
   scale_size(range = c(0, 3))
 ```
-
 # Multimodal simulation
 
 \begin{enumerate}
@@ -216,4 +211,10 @@ mode can be perfectly matched to the shared topics in the other.
 ```{r}
 gammas <- multimodal_gammas(100, c(3, 3),c(3, 3), k_shared = 4, alpha_shared = 3)
 map(gammas, head)
+```
+
+```{r}
+source <- list(pos = gammas[[1]], mass = rep(1, ncol(gammas[[1]])))
+target <- list(pos = gammas[[2]], mass = rep(1, ncol(gammas[[2]])))
+transport_align_pair(source, target)
 ```
