@@ -102,4 +102,18 @@ Two possibilities we discussed were:
 \item Something similar, but instead of taking $C_2^*$ to be a row-permuted version of $C_2$, simulate data from the model implied by $C_1$, and compare the refinement quality in the simulations to that in the observed data.
 \end{itemize}
 
+On thinking about it a little more, I don't think this procedure is likely to work.
+Both a split into two very distinct clusters and a split of a single cluster into two are going to give similar refinement matrices.
+A potentially better approach follows.
+
+The question: If we see a cluster split in two, how much do we ``believe'' in the split?
+Are the daughters really distinct clusters, or are they an arbitrary splitting up of a single region of high density.
+
+Proposed answer: Suppose cluster a splits into clusters b and c.
+If this is a ``good'' split, then all the clusters that are refinements of a will also be refinements of b and c.
+If it is not, not all oof the clusters that are refinements of a will also be refinements of b and c.
+See the image below.
+
+\includegraphics[width=.8\textwidth]{good-bad-split}
+
 \end{document}
