@@ -118,13 +118,17 @@ between the topics on the simplex. We elaborate on this formulation elsewhere.
 without having to travel too far (i.e., without having too high a cost).
 \end{enumerate}
 
-```{r, fig.width = 4, fig.height = 3}
+```{r}
+library("Barycenter")
 library("MASS")
 library("dplyr")
 library("ggplot2")
-source("background_funs.R")
+library("pdist")
+library("purrr")
 theme_set(theme_minimal())
+```
 
+```{r, fig.width = 4, fig.height = 3}
 # simulating masses
 masses <- illustration_data(4, 5)
 ggplot(masses) +
@@ -166,20 +170,22 @@ $\*u^{\ast}$ and $\*v^{\ast}$, define the optimal $\*P^{\ast}$,
 \*P^{\ast} &= \text{diag}\left(\*u^{\ast}\right)\*K \text{diag}\left(\*v^{\ast}\right)
 \end{align*}
 \item Let's look at an implementation on the toy dataset from above. Our cost
-matrix will be the euclidean distance between the masses.
+matrix will be the euclidean distance between the masses. We are using the
+`Sinkhorn` function in package `Barycenter`.
 \end{enumerate}
 
 ```{r}
-library("pdist")
-library("purrr")
 distn <- masses %>%
   split(.$set) %>%
   map(~ select(., V1, V2, mass))
 C <- pdist(distn[[1]][, 1:2], distn[[2]][, 1:2]) %>%
   as.matrix()
 
-sink_res <- sinkhorn(distn[[1]]$mass, distn[[2]]$mass, C, 0.01)
-links <- merge_link_data(sink_res$P, masses)
+distn_mat <- distn %>%
+  map(~ as.matrix(.$mass))
+
+sink_res <- Sinkhorn(distn_mat[[1]], distn_mat[[2]], C)
+links <- merge_link_data(sink_res$Transportplan, masses)
 ```
 
 
@@ -198,14 +204,11 @@ ggplot() +
 
 \begin{enumerate}
 \item This algorithm can at times be numerically unstable, because the
-elementwise division in the alternating updates can end up dividing by 0. In
-fact, if you check the links above, you will find that the mass constraint
-$\*P\*1_{m} = \*b$ is not even close to being satisfied. This is because I chose
-a large $\epsilon$ -- any smaller, and R would complain that I am dividing by 0.
+elementwise division in the alternating updates can end up dividing by 0.
 \item An alternate formulation is more stable. The starting point is the dual of
 the regularized optimization \ref{eq:opt_reg},
 \begin{align}
-\max_{\*f \in \reals^{n}, \*g \in \reals^{m}} \left<\*f, \*a\right> + \left<\*g, \*b\right> - \epsilon \left<\exp{\frac{1}{\epsilon}\*f}, \exp{\frac{1}{\epsilon}\*g}\right>
+\max_{\*f \in \reals^{n}, \*g \in \reals^{m}} \left<\*f, \*a\right> + \left<\*g, \*b\right> - \epsilon \left<\exp{\frac{1}{\epsilon}\*f}, \*K \exp{\frac{1}{\epsilon}\*g}\right>
 \end{align}
 \item It turns out (not at all obvious) that this can also be optimized through
 alternating iterations, this time of $\*f$ and $\*g$. The updates are,

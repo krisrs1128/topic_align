@@ -78,7 +78,8 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
   }
   
   map(gammas, ~ cbind(gamma_shared, .)) %>%
-    map(~ cbind(., 1 - rowSums(.)))
+    map(~ cbind(., 1 - rowSums(.))) %>%
+    map(~ set_colnames(., letters[1:ncol(.)]))
 }
 
 simulate_lda <- function(betas, gammas, n0=NULL) {
@@ -95,3 +96,4 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
   colnames(x) <- seq_len(ncol(betas))
   x
 }
+

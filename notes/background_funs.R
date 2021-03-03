@@ -12,41 +12,24 @@ illustration_data <- function(n, m) {
   b <- cbind(b_loc, mass = rgamma(m, 1)) %>%
     as.data.frame() %>%
     mutate(id = as.character(row_number()))
-  
+
   masses <- bind_rows(a, b, .id = "set") %>%
     group_by(set) %>%
     mutate(mass = mass / sum(mass))
 }
 
-sinkhorn <- function(a, b, C, epsilon = 1e-2, tol = 1e-5) {
-  K <- exp(-C / epsilon)
-  v <- rep(1, ncol(C))
-  obj <- 1e10
-  while (TRUE) {
-    u <- a / (as.numeric(K %*% v))
-    v <- b / (as.numeric(t(K) %*% u))
-    
-    # evaluate objective
-    P <- diag(u) %*% K %*% diag(v)
-    obj_new <- sum(diag(t(C) %*% P))
-    if (obj - obj_new < tol) break
-    obj <- obj_new
-  }
-  list(u = u, v = v, P = P) 
-}
 
 merge_link_data <- function(P, masses) {
   links <- data.frame(P) %>%
     mutate(source = str_c("1-", row_number())) %>%
     pivot_longer(cols = starts_with("X"), names_to = "target") %>%
     mutate(target = str_replace(target, "X", "2-"))
-  
+
   masses_ <- masses %>%
     unite("set_id", set, id, sep = "-") %>%
     select(set_id, V1, V2)
-  
+
   links %>%
     left_join(masses_, c("source" = "set_id")) %>%
     left_join(masses_, c("target" = "set_id"))
 }
-  
