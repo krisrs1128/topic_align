@@ -113,7 +113,7 @@ library(topicmodels)
 library(slam)
 
 # load the topic alignment functions
-source("align_topic_functions.R")
+source("R_LSY/align_topics_all_functions.R")
 
 # viz default theme
 theme_set(theme_minimal())
@@ -150,7 +150,7 @@ topic_models_dir = "lda_models/"
 lda_models = 
   run_lda_models(
     data = vm_16s,
-    Ks = 1:13,
+    Ks = 1:16,
     method = "VEM",
     seed = 2,
     dir = topic_models_dir
@@ -168,7 +168,6 @@ head(lda_models$gammas)
 
 aligned_topics = 
   align_topics(
-    data = asv_for_topic, 
     lda_models = lda_models
   )
 
@@ -200,37 +199,107 @@ g_aligned_topics =
 g_aligned_topics
 
 
-g_aligned_topics = 
-  visualize_aligned_topics(
-    aligned_topics = aligned_topics,
-    add_leaves = FALSE
-    )
-
-g_aligned_topics
-
-
-
-g_aligned_topics_ref = 
-  visualize_aligned_topics(
-    aligned_topics = aligned_topics,
-    color_by = "reference",
-    add_leaves = FALSE
-    )
-
-g_aligned_topics_ref
+# g_aligned_topics = 
+#   visualize_aligned_topics(
+#     aligned_topics = aligned_topics,
+#     add_leaves = FALSE
+#     )
+# 
+# g_aligned_topics
 
 
-g_aligned_topics_ref = 
-  visualize_aligned_topics(
-    aligned_topics = aligned_topics,
-    color_by = "reference",
-    add_leaves = TRUE
-    )
 
-g_aligned_topics_ref
 
 ```
 
+
+Below is a test with an order constrain on the topics of the last model.
+
+
+```{r}
+
+aligned_topics_with_c = 
+  align_topics(
+    lda_models = lda_models,
+    order_constrain = tibble(m = 16 %>% factor(., levels = 1:16),
+                             k_LDA = letters[1:16],
+                             k = c(1,2,3,4,5,9,10,11,12,13,14,17,18, 21,22,23))
+  )
+
+
+g_aligned_topics_with_c = 
+  visualize_aligned_topics(
+    aligned_topics = aligned_topics_with_c,
+    add_leaves = TRUE,
+    min_beta = 0.05,
+    add_words_labels = TRUE
+    )
+
+g_aligned_topics_with_c
+
+
+```
+
+
+Checking the alignment scores along the branches (in an attempt to find robust topics or to prune the topic tree when the topics stop being well aligned)
+
+
+```{r}
+
+scores = compute_score_along_branches(aligned_topics = aligned_topics)
+
+ggplot(scores, 
+       aes(x = m %>% as.numeric(), y = score, col = branch %>% factor())) +
+  geom_line()
+
+
+ggplot(scores, 
+       aes(x = m %>% as.numeric(), y = score %>% log(), col = branch %>% factor())) +
+  geom_line()
+
+
+ggplot(scores, 
+       aes(x = m, y = branch, fill = branch %>% factor(), alpha = score)) +
+  geom_tile() +
+  scale_alpha(range = c(0,1)) +
+  guides(fill = FALSE, alpha = FALSE)
+
+
+
+ggplot(scores, 
+       aes(x = m, y = branch, fill = branch %>% factor(), alpha = score)) +
+  geom_tile() +
+  scale_alpha(range = c(0,1)) +
+  guides(fill = FALSE, alpha = FALSE)
+
+
+
+ggplot(scores, 
+       aes(x = m, y = branch, fill = branch %>% factor(), alpha = score %>% log())) +
+  geom_tile() +
+  scale_alpha(range = c(0,1)) +
+  guides(fill = FALSE, alpha = FALSE)
+
+
+ggplot(scores %>% 
+         arrange(branch, m) %>% 
+         group_by(branch) %>% 
+         mutate(first_m = first(m)) %>% 
+         ungroup() %>% 
+         arrange(first_m) %>% 
+         mutate(branch = branch %>% factor(., unique(branch))), 
+       aes(x = m, y = branch, fill = score)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "steelblue")
+
+
+scores %>% 
+  group_by(m) %>% 
+  summarize(score = mean(score)) %>% 
+  ggplot(aes(x = m %>% as.numeric(), y = score)) + geom_line() +
+  scale_x_continuous(breaks = 1:16, minor_breaks = NULL)
+
+```
 
 ## Example 2: varying $\alpha$
 
