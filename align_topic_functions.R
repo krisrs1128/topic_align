@@ -1126,11 +1126,11 @@ gamma_masses <- function(gammas_long) {
 }
 
 
-transport_align_pair <- function(source, target) {
+transport_align_pair <- function(source, target, ...) {
   C <- pdist(t(source$pos), t(target$pos))
   m1 <- matrix(source$mass, ncol = 1)
   m2 <- matrix(target$mass, ncol = 1)
-  sink_res <- Sinkhorn(m1, m2, as.matrix(C))
+  sink_res <- Sinkhorn(m1, m2, as.matrix(C), ...)
 
   reshape_plan(
     sink_res$Transportplan,
