@@ -25,8 +25,8 @@ hit.
 \item Something I don't like about just simulating from a fixed $K$ is that
 people might then become fixated on choosing the ``right'' $K$, which is
 inimical\footnote{To use a word I just learned.} to the whole point of the
-study. I'd like to argue that none of the choices of $K$ are correct, but that
-we can be informed about what trade-offs are involved between different choices.
+study. I'd like to argue that none of the choices of $K$ are true, but for a
+given purpose, there might be a few ranges of $K$ where results are similar.
 \end{enumerate}
 
 # Strategy 2: Branching $\beta$'s
