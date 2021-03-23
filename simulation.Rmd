@@ -25,8 +25,8 @@ hit.
 \item Something I don't like about just simulating from a fixed $K$ is that
 people might then become fixated on choosing the ``right'' $K$, which is
 inimical\footnote{To use a word I just learned.} to the whole point of the
-study. I'd like to argue that none of the choices of $K$ are correct, but that
-we can be informed about what trade-offs are involved between different choices.
+study. I'd like to argue that none of the choices of $K$ are true, but for a
+given purpose, there might be a few ranges of $K$ where results are similar.
 \end{enumerate}
 
 # Strategy 2: Branching $\beta$'s
@@ -65,11 +65,13 @@ library("Barycenter")
 library("MCMCpack")
 library("dplyr")
 library("ggplot2")
+library("ggraph")
 library("ggrepel")
 library("magrittr")
 library("pdist")
 library("purrr")
 library("stringr")
+library("tidygraph")
 library("tidyr")
 library("topicmodels")
 source("align_topic_functions.R")
@@ -100,7 +102,7 @@ cbind(tree, topics) %>%
   labs(x = "word", y = "Tree Node") +
   scale_y_discrete(expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0)) +
-  scale_fill_gradient(low = "white", high = "black") +
+  scale_fill_distiller(direction = 1)
   theme(
     panel.spacing=unit(.05, "lines"),
     panel.border = element_rect(color = "black", fill = NA, size = 1),
@@ -144,7 +146,7 @@ ggplot(fits$betas, aes(x = w, y = reorder(k_LDA_, desc(k_LDA_)), fill = b)) +
   labs(x = "word", y = "topic") +
   scale_y_discrete(expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0)) +
-  scale_fill_gradient(low = "white", high = "black") +
+  scale_fill_distiller(direction = 1)
   theme(
     panel.spacing=unit(.05, "lines"),
     panel.border = element_rect(color = "black", fill = NA, size = 1),
@@ -154,24 +156,93 @@ ggplot(fits$betas, aes(x = w, y = reorder(k_LDA_, desc(k_LDA_)), fill = b)) +
 ```
 
 \begin{enumerate}
-
+\item It's not clear how to compare the fitted with the true set of topics,
+because we would need to account for two sources of error: failure to recover
+the correct topics or failure to align. It would be simpler if we could decouple
+these different sources of error.
+\item For the second, we could align the true topics as they are, to see if they
+recover the tree. This is easy to understand, but leaves us open to the
+criticism that alignment might collapse if there are even small errors in
+recovered topics.
+\item For the first, we could compute the likelihood of new data under the true
+and recovered topics\footnote{We would have to identify reasonable choices of
+$\gamma_{i}$ in the new data, perhaps regressing documents onto topics?}. \item
+To get towards the second item above, we will ignore `x` for now, focusing
+solely on the simulated topic tree. I arbitrarily set all the topic weights
+equal to one another.
 \end{enumerate}
 
-```{r}
-betas <- widen_betas(fits$betas)
-masses <- gamma_masses(fits$gammas)
-alignments <- transport_align(betas, masses)
-head(alignments)
+```{r, fig.width = 4, fig.height = 2.5, fig.cap = "Adjacency matrix view of alignment in a high SNR regime."}
+beta_list <- function(tree_data, l = 2, prefix = "beta") {
+  beta <- tree_data %>%
+    filter(level == l) %>%
+    select(matches("[0-9]+")) %>%
+    t()
+  colnames(beta) <- str_c(prefix, 1:ncol(beta))
+  list(mass = rep(1 / ncol(beta), ncol(beta)), pos = beta)
+}
+
+sources <- beta_list(cbind(tree, topics), 2, "sources")
+targets <- beta_list(cbind(tree, topics), 3, "targets")
+alignment <- transport_align_pair(sources, targets, lambda = 0.01)
+ggplot(alignment) +
+  geom_tile(aes(x = k_LDA_next, y = k_LDA, fill = w)) +
+  scale_fill_distiller(direction = 1) +
+  theme(
+    axis.text = element_text(size = 6),
+    legend.position = "bottom",
+    legend.key.height = unit(0.1, "cm"),
+    legend.text = element_text(size = 4)
+  )
 ```
 
-```{r}
-alignments %>%
-  filter(w > 0.02) %>%
-  ggplot(aes(x = k, y = k_LDA_, size = w, alpha = w)) +
-  geom_point() +
-  geom_segment(aes( xend = k_next, yend = k_LDA_next)) +
-  scale_size(range = c(0, 3))
+
+```{r, fig.width = 4, fig.height = 1.7, fig.cap = "The graph equivalent of the adjacency matrix above."}
+G <- tbl_graph(edges = alignment)
+ggraph(G) +
+  geom_edge_link(aes(width = w)) +
+  geom_node_label(aes(label = name), size = 1.8) +
+  scale_edge_width(range = c(0.01, 2))
 ```
+
+\begin{enumerate}
+\item It seems that for the tree constructed above, it's easy to reconstruct the
+alignment. Is there a point at which it breaks down? A more challenging
+situation will be necessary in order to fruitfully compare competing approaches.
+\item One way to make the problem harder is to give less time for the topics to
+evolve along the tree. This can be accomplished by reducing the mean of the
+exponential branching times. It would be interesting to estimate these
+alignments along a sequence of increasingly challenging problems, in the spirit
+of Le Cam's LAN.
+\item This intuition is confirmed in the figure below.
+\end{enumerate}
+
+```{r, fig.width = 4, fig.height = 2.5, fig.cap = "Topic alignments deteriorate when the amount of time given to evolve is reduced."}
+tree <- generate_tree(n_lev, lambda = 1000)
+topics <- tree_topics(tree)
+sources <- beta_list(cbind(tree, topics), 2, "sources")
+targets <- beta_list(cbind(tree, topics), 3, "targets")
+alignment <- transport_align_pair(sources, targets, lambda = 0.01)
+ggplot(alignment) +
+  geom_tile(aes(x = k_LDA_next, y = k_LDA, fill = w)) +
+  scale_fill_distiller(direction = 1) +
+  theme(
+    axis.text = element_text(size = 6),
+    legend.position = "bottom",
+    legend.key.height = unit(0.1, "cm"),
+    legend.text = element_text(size = 4)
+  )
+```
+
+```{r, fig.width = 4, fig.height = 1.7, fig.cap = "The equivalent graph for the deteriorated alignment."}
+G <- tbl_graph(edges = alignment)
+ggraph(G) +
+  geom_edge_link(aes(width = w)) +
+  geom_node_label(aes(label = name), size = 1.8) +
+  scale_edge_width(range = c(0.01, 2))
+```
+
+
 # Multimodal simulation
 
 \begin{enumerate}
@@ -216,5 +287,5 @@ map(gammas, head)
 ```{r}
 source <- list(pos = gammas[[1]], mass = rep(1, ncol(gammas[[1]])))
 target <- list(pos = gammas[[2]], mass = rep(1, ncol(gammas[[2]])))
-transport_align_pair(source, target)
+transport_align_pair(source, target, lambda = 0.01)
 ```
