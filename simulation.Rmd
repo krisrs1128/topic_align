@@ -6,7 +6,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
 ```
 
 \begin{enumerate}
@@ -87,18 +87,18 @@ topics <- tree_topics(tree)
 ```
 
 ```{r, fig.cap = "A simulated tree. Larger jumps in time will lead to larger differences between parent and child topics."}
-ggplot(tree, aes(x = level, y = time)) +
-  geom_segment(aes(xend = level - 1, yend = parent_time), col = "#d3d3d3") +
+ggplot(tree %>% mutate(m = as.numeric(m)), aes(x = m, y = time)) +
+  geom_segment(aes(xend = m - 1, yend = parent_time), col = "#d3d3d3") +
   geom_point() +
   geom_text_repel(aes(label = node))
 ```
 
-```{r, fig.cap = "Topics associated with tree nodes, at the three simulated levels (plus root). Notice that neighboring rows tend to have similar b[k,v]'s.", echo = FALSE, fig.height = 3.5, fig.width = 3.3}
+```{r, fig.cap = "Topics associated with tree nodes, at the three simulated levels (plus root). Notice that neighboring rows tend to have similar b[k,v]'s.", echo = FALSE, fig.height = 3, fig.width = 4}
 cbind(tree, topics) %>%
   pivot_longer(cols = c(`1`:`10`), names_to = "v") %>%
   ggplot() +
   geom_tile(aes(x = v, fill = value, y = as.factor(node)), stat = "identity") +
-  facet_grid(level ~ ., scale = "free_y", space = "free") +
+  facet_grid(m ~ ., scale = "free_y", space = "free") +
   labs(x = "word", y = "Tree Node") +
   scale_y_discrete(expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0)) +
@@ -129,16 +129,18 @@ recover hierarchical structure in the more clustered setting, we choose $\alpha
 \end{enumerate}
 
 ```{r}
+tree
 leaves <- cbind(tree, topics) %>%
-  filter(level == 3) %>%
+  filter(leaf) %>%
   dplyr::select(`1`:`10`)
 n <- 100
 gamma <- rdirichlet(n, alpha = rep(0.1, nrow(leaves)))
+colnames(gamma) <- seq(2 ^ n_lev, 2 ^ (n_lev + 1) - 1)
 x <- simulate_lda(leaves, gamma)
-fits <- run_lda_models(x, 3:8, c(.1), "VEM", 123)
+fits <- run_lda_models(x, 2 ^ seq(0, n_lev), c(.1), "VEM", 123, reset = TRUE)
 ```
 
-```{r, fig.cap = "Example fitted topics, from the branching scenario.", echo = FALSE, fig.width = 4, fig.height = 6}
+```{r, fig.cap = "Example fitted topics, from the branching scenario.", echo = FALSE, fig.width = 4, fig.height = 3}
 fits$betas$k_LDA_ <- as.factor(fits$betas$k_LDA)
 ggplot(fits$betas, aes(x = w, y = reorder(k_LDA_, desc(k_LDA_)), fill = b)) +
   geom_tile() +
@@ -153,6 +155,17 @@ ggplot(fits$betas, aes(x = w, y = reorder(k_LDA_, desc(k_LDA_)), fill = b)) +
     strip.background = element_rect(color = "black", size = 1),
     axis.ticks.y = element_blank()
   )
+```
+```{r, fig.cap = "Alignment when using estimated topics."}
+alignment <- align_topics(x, fits)
+visualize_aligned_topics(alignment)
+```
+
+```{r, fig.cap = "Alignment when providing true topic betas and gammas. The only error here is in alignment, not topic estimation."}
+fits$betas <- reshape_tree_beta(tree, topics)
+fits$gammas <- agglomorate_gammas(tree, gamma)
+alignment <- align_topics(x, fits)
+visualize_aligned_topics(alignment)
 ```
 
 \begin{enumerate}
@@ -186,7 +199,6 @@ ggplot(alignment) +
     legend.text = element_text(size = 4)
   )
 ```
-
 
 ```{r, fig.width = 4, fig.height = 1.7, fig.cap = "The graph equivalent of the adjacency matrix above."}
 G <- tbl_graph(edges = alignment)

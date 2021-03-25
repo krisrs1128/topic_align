@@ -1,6 +1,6 @@
 
 generate_tree <- function(max_level = 4, lambda = 1) {
-  tree <- data.frame(node = 1, parent = NA, leaf = TRUE, level = 0, time = 0, parent_time = NA)
+  tree <- data.frame(node = 1, parent = NA, leaf = TRUE, m = 0, time = 0, parent_time = NA)
   
   while (TRUE) {
     # each leaf has two children
@@ -18,17 +18,61 @@ generate_tree <- function(max_level = 4, lambda = 1) {
       bind_rows(tree)
     
     # check stopping condition
-    if (max(tree$level) >= max_level) break
+    if (max(tree$m) >= max_level) break
   }
+  
   tree %>%
-    arrange(node)
+    arrange(node) %>%
+    group_by(m) %>%
+    mutate(
+      m = as.factor(m + 1),
+      K = n(),
+      k_LDA = letters[row_number()],
+      k_LDA_ = letters[row_number()]
+    ) %>%
+    ungroup()
 }
 
 generate_leaves <- function(node, ids, lambda = 1) {
-  result <- data.frame(node = ids, parent = node$node, leaf = TRUE, level = node$level + 1)
+  result <- data.frame(node = ids, parent = node$node, leaf = TRUE, m = node$m + 1)
   result$parent_time <- node$time
   result$time <- node$time + rexp(length(ids), lambda)
   result
+}
+
+agglomorate_gamma <- function(G, gamma, node_id = 1) {
+  descendants <- G %>%
+    filter(
+      is.finite(node_distance_to(node == node_id, mode = "out")),
+      leaf
+    ) %>%
+    pull(node) %>%
+    as.character()
+  tibble(
+    d = seq_len(nrow(gamma)),
+    g = rowSums(gamma[, descendants, drop=F])
+  )
+}
+
+agglomorate_gammas <- function(tree, gamma) {
+  G <- tbl_graph(
+    tree %>% select(node, m, leaf), 
+    tree %>% filter(!is.na(parent)) %>% select(-m, -leaf)
+  )
+  
+  nodes <- pull(G, node)
+  gamma_glom <- map(seq_along(nodes), ~ agglomorate_gamma(G, gamma, nodes[.]))
+  names(gamma_glom) <- nodes
+  bind_rows(gamma_glom, .id = "node") %>%
+    mutate(node = as.integer(node)) %>%
+    left_join(tree) %>%
+    select(m, K, k_LDA, d, g)
+}
+
+reshape_tree_beta <- function(tree, topics) {
+  cbind(tree, topics) %>%
+    pivot_longer(matches("[0-9]+"), "w", values_to = "b") %>%
+    select(m, K, k_LDA, w, b, k_LDA_)
 }
 
 tree_topics <- function(tree, V=10) {
@@ -90,7 +134,7 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
   
   x <- matrix(nrow = n, ncol = ncol(betas))
   for (i in seq_len(n)) {
-    x[i, ] <- rmultinom(1, n0, t(betas) %*% gammas[i, ])
+    x[i, ] <- rmultinom(1, n0[i], t(betas) %*% gammas[i, ])
   }
   rownames(x) <- seq_len(n)
   colnames(x) <- seq_len(ncol(betas))
@@ -99,7 +143,7 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
 
 beta_list <- function(tree_data, l = 2, prefix = "beta") {
   tree_data <- tree_data %>%
-    filter(level == l)
+    filter(m == l)
   beta <- tree_data %>%
     select(matches("[0-9]+")) %>%
     t()
@@ -115,7 +159,7 @@ simulation_error <- function(n_lev, lambda, layers = c(2, 3)) {
   alignment <- transport_align_pair(sources, targets, lambda = 0.01)
   
   tree_layer <- tree %>%
-    filter(level %in% layers)
+    filter(m %in% layers)
   
   alignment %>%
     mutate(parent = as.integer(k_LDA), node = as.integer(k_LDA_next)) %>%
