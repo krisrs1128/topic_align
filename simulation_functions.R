@@ -97,3 +97,34 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
   x
 }
 
+beta_list <- function(tree_data, l = 2, prefix = "beta") {
+  tree_data <- tree_data %>%
+    filter(level == l)
+  beta <- tree_data %>%
+    select(matches("[0-9]+")) %>%
+    t()
+  colnames(beta) <- tree_data$node
+  list(mass = rep(1 / ncol(beta), ncol(beta)), pos = beta)
+}
+
+simulation_error <- function(n_lev, lambda, layers = c(2, 3)) {
+  tree <- generate_tree(n_lev, lambda)
+  topics <- tree_topics(tree)
+  sources <- beta_list(cbind(tree, topics), layers[1])
+  targets <- beta_list(cbind(tree, topics), layers[2])
+  alignment <- transport_align_pair(sources, targets, lambda = 0.01)
+  
+  tree_layer <- tree %>%
+    filter(level %in% layers)
+  
+  alignment %>%
+    mutate(parent = as.integer(k_LDA), node = as.integer(k_LDA_next)) %>%
+    full_join(tree_layer) %>%
+    mutate(
+      time_delta = time - parent_time,
+      time_delta = ifelse(is.na(time_delta), 0, time_delta),
+      lambda = lambda,
+      linked = time_delta != 0
+    ) %>%
+    select(lambda, parent, node, time_delta, linked, w)
+}
