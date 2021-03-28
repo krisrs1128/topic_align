@@ -129,7 +129,6 @@ recover hierarchical structure in the more clustered setting, we choose $\alpha
 \end{enumerate}
 
 ```{r}
-tree
 leaves <- cbind(tree, topics) %>%
   filter(leaf) %>%
   dplyr::select(`1`:`10`)
@@ -156,15 +155,15 @@ ggplot(fits$betas, aes(x = w, y = reorder(k_LDA_, desc(k_LDA_)), fill = b)) +
     axis.ticks.y = element_blank()
   )
 ```
-```{r, fig.cap = "Alignment when using estimated topics."}
-alignment <- align_topics(x, fits)
+```{r, fig.cap = "Alignment when using estimated topics.", fig.width = 4, fig.height = 2.5}
+alignment <- align_topics(fits)
 visualize_aligned_topics(alignment)
 ```
-
-```{r, fig.cap = "Alignment when providing true topic betas and gammas. The only error here is in alignment, not topic estimation."}
+```{r, fig.cap = "Alignment when providing true topic betas and gammas. The only error here is in alignment, not topic estimation.", fig.width = 4, fig.height = 2.5}
 fits$betas <- reshape_tree_beta(tree, topics)
 fits$gammas <- agglomorate_gammas(tree, gamma)
-alignment <- align_topics(x, fits)
+alignment <- align_topics(fits)
+head(alignment$gamma_alignment)
 visualize_aligned_topics(alignment)
 ```
 
@@ -185,29 +184,6 @@ solely on the simulated topic tree. I arbitrarily set all the topic weights
 equal to one another.
 \end{enumerate}
 
-```{r, fig.width = 4, fig.height = 2.5, fig.cap = "Adjacency matrix view of alignment in a high SNR regime."}
-sources <- beta_list(cbind(tree, topics), 2)
-targets <- beta_list(cbind(tree, topics), 3)
-alignment <- transport_align_pair(sources, targets, lambda = 0.01)
-ggplot(alignment) +
-  geom_tile(aes(x = k_LDA_next, y = k_LDA, fill = w)) +
-  scale_fill_distiller(direction = 1) +
-  theme(
-    axis.text = element_text(size = 6),
-    legend.position = "bottom",
-    legend.key.height = unit(0.1, "cm"),
-    legend.text = element_text(size = 4)
-  )
-```
-
-```{r, fig.width = 4, fig.height = 1.7, fig.cap = "The graph equivalent of the adjacency matrix above."}
-G <- tbl_graph(edges = alignment)
-ggraph(G) +
-  geom_edge_link(aes(width = w)) +
-  geom_node_label(aes(label = name), size = 1.8) +
-  scale_edge_width(range = c(0.01, 2))
-```
-
 \begin{enumerate}
 \item It seems that for the tree constructed above, it's easy to reconstruct the
 alignment. Is there a point at which it breaks down? A more challenging
@@ -223,27 +199,13 @@ of Le Cam's LAN.
 ```{r, fig.width = 4, fig.height = 2.5, fig.cap = "Topic alignments deteriorate when the amount of time given to evolve is reduced."}
 tree <- generate_tree(n_lev, lambda = 1000)
 topics <- tree_topics(tree)
-sources <- beta_list(cbind(tree, topics), 2)
-targets <- beta_list(cbind(tree, topics), 3)
-alignment <- transport_align_pair(sources, targets, lambda = 0.01)
-ggplot(alignment) +
-  geom_tile(aes(x = k_LDA_next, y = k_LDA, fill = w)) +
-  scale_fill_distiller(direction = 1) +
-  theme(
-    axis.text = element_text(size = 6),
-    legend.position = "bottom",
-    legend.key.height = unit(0.1, "cm"),
-    legend.text = element_text(size = 4)
-  )
+fits$betas <- reshape_tree_beta(tree, topics)
+fits$gammas <- agglomorate_gammas(tree, gamma)
+alignment <- align_topics(fits)
+head(alignment$gamma_alignment)
+visualize_aligned_topics(alignment)
 ```
 
-```{r, fig.width = 4, fig.height = 1.7, fig.cap = "The equivalent graph for the deteriorated alignment."}
-G <- tbl_graph(edges = alignment)
-ggraph(G) +
-  geom_edge_link(aes(width = w)) +
-  geom_node_label(aes(label = name), size = 1.8) +
-  scale_edge_width(range = c(0.01, 2))
-```
 ```{r, fig.height = 2.5, fig.width = 4.8, fig.cap = "Change in estimation error as the topics begin to blend into one another. For small values of $\\lambda$, the topics are given enough time to evolve to be able to distinguish, but not so long that they cannot be matched to their parent. Points along the left hand corner are edges that are given an edge weight even though there is no true edge."}
 lambda_seq <- 10 ^ seq(0, 3, length.out = 5)
 lambda_seq <- rep(lambda_seq, each = 100)

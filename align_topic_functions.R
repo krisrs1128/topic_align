@@ -162,7 +162,7 @@ trim_models =
     }
   }
 
-align_topics = function(data, lda_models, m_ref = NULL, order_constrain = NULL){
+align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
 
   # adding the reference model
   if(is.null(m_ref)) m_ref = lda_models$gammas$m %>% levels() %>% last()
@@ -216,7 +216,7 @@ align_topics = function(data, lda_models, m_ref = NULL, order_constrain = NULL){
   if(condition){
     betas = lda_models$betas
     # betas = betas %>%  ... (add order)
-    aligned_topics_beta = .align_topics_beta(data, betas = betas)
+    aligned_topics_beta = .align_topics_beta(betas = betas)
     ans$beta_alignment = aligned_topics_beta
   }
 
