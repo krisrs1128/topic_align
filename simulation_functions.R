@@ -40,41 +40,6 @@ generate_leaves <- function(node, ids, lambda = 1) {
   result
 }
 
-agglomorate_gamma <- function(G, gamma, node_id = 1) {
-  descendants <- G %>%
-    filter(
-      is.finite(node_distance_to(node == node_id, mode = "out")),
-      leaf
-    ) %>%
-    pull(node) %>%
-    as.character()
-  tibble(
-    d = seq_len(nrow(gamma)),
-    g = rowSums(gamma[, descendants, drop=F])
-  )
-}
-
-agglomorate_gammas <- function(tree, gamma) {
-  G <- tbl_graph(
-    tree %>% select(node, m, leaf), 
-    tree %>% filter(!is.na(parent)) %>% select(-m, -leaf)
-  )
-  
-  nodes <- pull(G, node)
-  gamma_glom <- map(seq_along(nodes), ~ agglomorate_gamma(G, gamma, nodes[.]))
-  names(gamma_glom) <- nodes
-  bind_rows(gamma_glom, .id = "node") %>%
-    mutate(node = as.integer(node)) %>%
-    left_join(tree) %>%
-    select(m, K, k_LDA, d, g)
-}
-
-reshape_tree_beta <- function(tree, topics) {
-  cbind(tree, topics) %>%
-    pivot_longer(matches("[0-9]+"), "w", values_to = "b") %>%
-    select(m, K, k_LDA, w, b, k_LDA_)
-}
-
 tree_topics <- function(tree, V=10) {
  mu <- matrix(0, nrow(tree), V) 
  tree <- tree %>%
@@ -151,24 +116,27 @@ beta_list <- function(tree_data, l = 2, prefix = "beta") {
   list(mass = rep(1 / ncol(beta), ncol(beta)), pos = beta)
 }
 
-simulation_error <- function(n_lev, lambda, layers = c(2, 3)) {
-  tree <- generate_tree(n_lev, lambda)
-  topics <- tree_topics(tree)
-  sources <- beta_list(cbind(tree, topics), layers[1])
-  targets <- beta_list(cbind(tree, topics), layers[2])
-  alignment <- transport_align_pair(sources, targets, lambda = 0.01)
+embed_edges <- function(edges, ...) {
+  umap_recipe <- recipe(~ ., edges) %>%
+    update_role(replicate, K, k_LDA, k_LDA_next, edge_weight, new_role = "id") %>%
+    step_umap(all_predictors(), ...)
   
-  tree_layer <- tree %>%
-    filter(m %in% layers)
+  prep(umap_recipe)
+}
+
+endpoint_topics <- function(beta, edge_weights) {
+  edge_weights <- edge_weights %>%
+    select(m, m_next, k_LDA, k_LDA_next, w) %>%
+    rename(edge_weight = w, K = m, K_next = m_next)
   
-  alignment %>%
-    mutate(parent = as.integer(k_LDA), node = as.integer(k_LDA_next)) %>%
-    full_join(tree_layer) %>%
-    mutate(
-      time_delta = time - parent_time,
-      time_delta = ifelse(is.na(time_delta), 0, time_delta),
-      lambda = lambda,
-      linked = time_delta != 0
-    ) %>%
-    select(lambda, parent, node, time_delta, linked, w)
+  wide_topics <- beta %>%
+    select(K, k_LDA, w, b) %>%
+    pivot_wider(K:k_LDA, w, values_from = b, names_prefix = "beta_") %>%
+    mutate(K = as.factor(K))
+  
+  edge_weights %>%
+    left_join(wide_topics) %>%
+    left_join(wide_topics, c("K_next" = "K", "k_LDA_next" = "k_LDA")) %>%
+    rename_with(~ gsub(".x$", "_source", .)) %>%
+    rename_with(~ gsub(".y$", "_target", .)) 
 }
