@@ -176,41 +176,26 @@ simulate_replicate <- function() {
   endpoint_topics(fits$beta, alignment$gamma_alignment)
 }
   
-edges <- map_dfr(seq_len(20), ~ simulate_replicate(), .id = "replicate")
+edges <- map_dfr(seq_len(50), ~ simulate_replicate(), .id = "replicate")
 edge_fits <- embed_edges(edges)
 ```
 
 
-```{r, fig.height = 5, fig.width = 5}
+```{r, fig.height = 5, fig.width = 10, fig.cap = "We can embed edges according to the topics that they link. Each point is an edge from one of 20 simulation replicates, each with new data generated from the same topic tree. Edges that have similar source and target topics are placed close to one another. The size of each point is the weight of that edge. Points have been slightly jittered."}
 edge_scores <- juice(edge_fits) %>%
   mutate(endpoints = str_c(k_LDA, k_LDA_next, sep = "_")) %>%
-  group_by(K, endpoints) %>%
-  mutate(
-    mean_weight = mean(edge_weight), 
-    mean_umap_1 = mean(umap_1), 
-    mean_umap_2 = mean(umap_2)
-  ) %>%
   group_by(replicate, K, endpoints) %>%
   slice_head()
-
-edge_labels <- edge_scores %>%
-  group_by(K, endpoints) %>%
-  slice_head()
-
 ggplot(edge_scores, aes(umap_1, umap_2, col = K)) +
-  geom_segment(aes(xend = mean_umap_1, yend = mean_umap_2), col = "black", size = 0.1, alpha = 0.3) +
-  geom_point(aes(size = edge_weight), alpha = 0.2) +
-  geom_point(aes(mean_umap_1, mean_umap_2), alpha = 1) +
-  geom_text_repel(
-    data = edge_labels %>% filter(mean_weight > 5e-4),
-    aes(label = endpoints),
-    size = 3
-  ) +
+  geom_point(
+    aes(size = edge_weight), 
+    alpha = 0.4,
+    position = position_jitter(w = .5, h = .5)
+    ) +
   scale_color_brewer(palette = "Set2") +
   scale_size(range = c(0.1, 6)) +
   coord_fixed()
 ```
-
 
 \begin{enumerate}
 \item It's not clear how to compare the fitted with the true set of topics,
