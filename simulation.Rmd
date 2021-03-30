@@ -64,6 +64,7 @@ where $\exp{}$ is applied elementwise.
 library("Barycenter")
 library("MCMCpack")
 library("dplyr")
+library("embed")
 library("ggplot2")
 library("ggraph")
 library("ggrepel")
@@ -72,12 +73,20 @@ library("pdist")
 library("purrr")
 library("stringr")
 library("tidygraph")
+library("tidymodels")
 library("tidyr")
 library("topicmodels")
 source("align_topic_functions.R")
 source("simulation_functions.R")
 set.seed(123)
-theme_set(theme_minimal())
+mytheme <- theme_minimal() + 
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#f7f7f7"),
+    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
+    legend.position = "bottom"
+  )
+theme_set(mytheme)
 ```
 
 ```{r}
@@ -159,12 +168,33 @@ ggplot(fits$betas, aes(x = w, y = reorder(k_LDA_, desc(k_LDA_)), fill = b)) +
 alignment <- align_topics(fits)
 visualize_aligned_topics(alignment)
 ```
-```{r, fig.cap = "Alignment when providing true topic betas and gammas. The only error here is in alignment, not topic estimation.", fig.width = 4, fig.height = 2.5}
-fits$betas <- reshape_tree_beta(tree, topics)
-fits$gammas <- agglomorate_gammas(tree, gamma)
-alignment <- align_topics(fits)
-head(alignment$gamma_alignment)
-visualize_aligned_topics(alignment)
+
+```{r}
+simulate_replicate <- function() {
+  x <- simulate_lda(leaves, gamma)
+  fits <- run_lda_models(x, 2 ^ seq(0, n_lev), c(.1), "VEM", 123, reset = TRUE)
+  endpoint_topics(fits$beta, alignment$gamma_alignment)
+}
+  
+edges <- map_dfr(seq_len(50), ~ simulate_replicate(), .id = "replicate")
+edge_fits <- embed_edges(edges)
+```
+
+
+```{r, fig.height = 5, fig.width = 10, fig.cap = "We can embed edges according to the topics that they link. Each point is an edge from one of 20 simulation replicates, each with new data generated from the same topic tree. Edges that have similar source and target topics are placed close to one another. The size of each point is the weight of that edge. Points have been slightly jittered."}
+edge_scores <- juice(edge_fits) %>%
+  mutate(endpoints = str_c(k_LDA, k_LDA_next, sep = "_")) %>%
+  group_by(replicate, K, endpoints) %>%
+  slice_head()
+ggplot(edge_scores, aes(umap_1, umap_2, col = K)) +
+  geom_point(
+    aes(size = edge_weight), 
+    alpha = 0.4,
+    position = position_jitter(w = .5, h = .5)
+    ) +
+  scale_color_brewer(palette = "Set2") +
+  scale_size(range = c(0.1, 6)) +
+  coord_fixed()
 ```
 
 \begin{enumerate}
@@ -199,44 +229,6 @@ of Le Cam's LAN.
 ```{r, fig.width = 4, fig.height = 2.5, fig.cap = "Topic alignments deteriorate when the amount of time given to evolve is reduced."}
 tree <- generate_tree(n_lev, lambda = 1000)
 topics <- tree_topics(tree)
-fits$betas <- reshape_tree_beta(tree, topics)
-fits$gammas <- agglomorate_gammas(tree, gamma)
-alignment <- align_topics(fits)
-head(alignment$gamma_alignment)
-visualize_aligned_topics(alignment)
-```
-
-```{r, fig.height = 2.5, fig.width = 4.8, fig.cap = "Change in estimation error as the topics begin to blend into one another. For small values of $\\lambda$, the topics are given enough time to evolve to be able to distinguish, but not so long that they cannot be matched to their parent. Points along the left hand corner are edges that are given an edge weight even though there is no true edge."}
-lambda_seq <- 10 ^ seq(0, 3, length.out = 5)
-lambda_seq <- rep(lambda_seq, each = 100)
-errors <- map2_dfr(length(lambda_seq), lambda_seq, ~ simulation_error(3, .y))
-ggplot(errors, aes(x = time_delta, y = w, col = log(lambda))) +
-  geom_point(size = 0.2, alpha = 0.2) +
-  geom_smooth(aes(group = lambda), se = F, size = 1, alpha = 0.7) +
-  scale_color_distiller(direction = 1) +
-  scale_x_log10() +
-  labs(x = "Time to Evolve", y = "Estimated Edge Weight", col = expression(lambda)) +
-  theme(
-    legend.position = "bottom",
-    legend.key.height = unit(0.1, "cm"),
-    panel.background = element_rect(fill = "#f7f7f7"),
-    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
-  )
-```
-
-```{r, fig.width = 6, fig.height = 3, fig.cap = "Edge weights begin to blur together when the true edges aren't easily distinguishable."}
-ggplot(errors) +
-  geom_histogram(aes(x = w, fill = linked, col = linked), bins = 100) +
-  facet_grid(lambda ~ ., scale = "free_y") +
-  scale_fill_brewer(palette = "Set2") +
-  scale_color_brewer(palette = "Set2") +
-  theme(
-    panel.grid.minor = element_blank(),
-    strip.text.y = element_blank(),
-    axis.text.y = element_text(size = 5),
-    panel.background = element_rect(fill = "#f7f7f7"),
-    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
-  )
 ```
 
 
