@@ -3,13 +3,26 @@
 ```{r workflow-demo-libraries}
 
 # Libraries to attach
-library(tidyverse)
-library(magrittr)
-library(topicmodels)
-library(slam)
+library("tidyverse")
+library("slam")
+library("Barycenter")
+library("MCMCpack")
+library("dplyr")
+library("embed")
+library("ggplot2")
+library("ggraph")
+library("ggrepel")
+library("magrittr")
+library("pdist")
+library("purrr")
+library("stringr")
+library("tidygraph")
+library("tidymodels")
+library("tidyr")
+library("topicmodels")
 library("topicvis")
 library("cowplot")
-
+source("refinement_functions.R")
 ## load the topic alignment functions
 source("../align_topic_functions.R")
 ## viz default theme
@@ -34,8 +47,8 @@ x$smooth <- simulate_gradient(n, mu0, mu1)
 mus <-  matrix(rnorm(10, sd = 10), ncol = 2)
 x$cluster <- simulate_cluster(n, mus)
 links <- list(
-  "cluster" = linked_cluster_data(x$cluster),
-  "smooth" = linked_cluster_data(x$smooth)
+  "cluster" = linked_cluster_data(x$cluster, Ks = 1:8),
+  "smooth" = linked_cluster_data(x$smooth, Ks = 1:8)
 )
 p1 <- ggplot(links$cluster$centroids) +
   geom_point(data = data.frame(x$cluster), aes(x = X1, y = X2), size = 0.2) +
@@ -144,6 +157,91 @@ And on the clustered data:
 make_refinement_sequence(links$cluster, k_sequence = seq(2, 6))
 get_path_weights(links$cluster, c('1', '2', '2', '5', '5'), k_sequence = seq(2, 6))
 get_path_weights(links$cluster, c('2', '1', '4', '3', '2'), k_sequence = seq(2, 6))
+```
+
+## Cluster split scores
+
+Let's make a function that computes a score for one cluster splitting into multiple clusters.
+
+```{r}
+##' @param cluster_id is the cluster id within one clustering solution
+##' @param k is the value of k for the clustering solution we find cluster_id in
+##' @return A vector of scores. All 1's means that all the descendants of cluster_id are refinements of the children of cluster_id, and so splitting cluster_id into its children is probably a good idea. Scores lower than 1 mean that this isn't true, and the split is more likely to be arbitrary.
+get_split_score = function(cluster_data, k, cluster_id, k_max) {
+    R12 = make_refinements_from_cluster_data(cluster_data, k, k+1)$R
+    daughters = which(R12[,cluster_id] >= .99)
+    daughter_names = rownames(R12)[daughters]
+    scores = numeric(k_max - k - 1)
+    for(j in (k+2):k_max) {
+        R1j = make_refinements_from_cluster_data(cluster_data, k, j)$R
+        R2j = make_refinements_from_cluster_data(cluster_data, k+1, j)$R
+        descendants = which(R1j[,cluster_id] >= 0)
+        descendant_names = rownames(R1j)[descendants]
+        daughter_descendant_scores = R2j[descendant_names,daughter_names,drop = FALSE]
+        ## OR logic = min, we want everything to be a refinement
+        ## abs(.5 - x) is a function that is maximal when x is 0 or 1 (indicating a refinement) and minimal when x = .5 (indicating not a refinement)
+        scores[j - k - 1] = min(2 * abs(.5 - daughter_descendant_scores))
+    }
+    return(mean(scores))
+}
+get_split_score(links$cluster, k = 2, cluster_id = '2', k_max = 8)
+## 4 doesn't split when we go from k = 4 to k = 5
+get_split_score(links$cluster, k = 4, cluster_id = '4', k_max = 8)
+## 1 splits into 4 and 5, which it should not
+get_split_score(links$cluster, k = 4, cluster_id = '1', k_max = 8)
+get_split_score(links$cluster, k = 5, cluster_id = '3', k_max = 8)
+get_split_score(links$cluster, k = 3, cluster_id = '3', k_max = 8)
+get_split_score(links$smooth, k = 1, cluster_id = '1', k_max = 8)
+get_split_score(links$smooth, k = 2, cluster_id = '2', k_max = 8)
+```
+
+Use the simulation functions from Kris's script to make data and fit with LDA:
+
+```{r}
+source("../align_topic_functions.R")
+source("../simulation_functions.R")
+n_lev <- 3
+tree <- generate_tree(n_lev)
+topics <- tree_topics(tree)
+leaves <- cbind(tree, topics) %>%
+  filter(leaf) %>%
+  dplyr::select(`1`:`10`)
+n <- 100
+gamma <- rdirichlet(n, alpha = rep(0.1, nrow(leaves)))
+colnames(gamma) <- seq(2 ^ n_lev, 2 ^ (n_lev + 1) - 1)
+x <- simulate_lda(leaves, gamma)
+fits <- run_lda_models(x, 1:2^n_lev, c(.1), "VEM", 123, reset = TRUE)
+alignment <- align_topics(fits)
+visualize_aligned_topics(alignment)
+```
+
+The split score for $k = 1$ to $k = 2$. It's quite low, which is in line with the visualization: the two clusters we get when $k = 2$ are not consistently the unique parents of the later clustering solutions.
+```{r}
+get_split_score_lda(fits, k = 1, cluster_id = 'topic_a', k_max = 8)
+```
+
+We can try the same thing with more distinct clusters:
+
+```{r}
+n_lev <- 3
+tree <- generate_tree(n_lev, lambda = .001)
+topics <- tree_topics(tree)
+leaves <- cbind(tree, topics) %>%
+  filter(leaf) %>%
+  dplyr::select(`1`:`10`)
+n <- 100
+gamma <- rdirichlet(n, alpha = rep(0.1, nrow(leaves)))
+colnames(gamma) <- seq(2 ^ n_lev, 2 ^ (n_lev + 1) - 1)
+x <- simulate_lda(leaves, gamma)
+fits <- run_lda_models(x, 1:2^n_lev, c(.1), "VEM", 123, reset = TRUE)
+get_split_score_lda(fits, k = 1, cluster_id = 'topic_a', k_max = 8)
+get_split_score_lda(fits, k = 2, cluster_id = 'topic_a', k_max = 8, daughter_threshold=.7)
+get_split_score_lda(fits, k = 3, cluster_id = 'topic_a', k_max = 8, daughter_threshold=.7)
+```
+
+```{r}
+alignment <- align_topics(fits)
+visualize_aligned_topics(alignment)
 ```
 
 ## Refinements for the VM data
