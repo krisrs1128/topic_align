@@ -455,3 +455,55 @@ next_level = function(f, n = 1){
   new_f = factor_levels[new_m] %>% factor(., levels = factor_levels)
   new_f
 }
+
+.topic_weights <- function(gammas) {
+  gammas %>%
+    group_by(m) %>%
+    mutate(total_weight = sum(g)) %>%
+    group_by(m, k_LDA) %>%
+    summarise(prop = sum(g) / first(total_weight)) %>%
+    split(.$m) %>%
+    map(~ pull(., prop)) %>%
+    map(~ matrix(., ncol = 1))
+}
+
+.beta_weights <- function(betas, masses) {
+  C <- pdist(betas[[1]], betas[[2]])
+  Sinkhorn(
+    masses[[1]],
+    masses[[2]],
+    as.matrix(C)
+  )$Transportplan %>%
+    as_tibble() %>%
+    mutate(k = row_number()) %>%
+    pivot_longer(-k, names_to = "k_next", values_to = "weight") %>%
+    mutate(k_next = as.integer(str_replace(k_next, "V", "")))
+}
+
+.align_topics_beta <- function(betas, gammas) {
+  betas_split <- betas %>%
+    split(.$m) %>%
+    map(~ pivot_wider(., k_LDA, w, values_from = b) %>% select(-k_LDA))
+
+  masses <- .topic_weights(gammas)
+  M <- length(betas_split)
+  W <- list()
+  for (m in seq_len(M - 1)) {
+    W[[m]] <- .beta_weights(betas_split[m:(m + 1)], masses[m:(m + 1)]) %>%
+      mutate(m = m, m_next = m + 1)
+  }
+
+  .beta_alignment_supplement(W)
+}
+
+.beta_alignment_supplement <- function(W) {
+  bind_rows(W) %>%
+    mutate(
+      across(starts_with("m"), as.factor),
+      k_LDA = letters[k],
+      k_LDA_next = letters[k_next]
+    ) %>%
+    group_by(m, k) %>%
+    mutate(norm_weight = weight / sum(weight)) %>%
+    select(m, m_next, k_LDA, k_LDA_next, weight, norm_weight, k, k_next)
+}
