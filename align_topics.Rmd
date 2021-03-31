@@ -165,7 +165,6 @@ head(lda_models$gammas)
 
 
 ```{r workflow-demo-align-topics}
-
 aligned_topics = 
   align_topics(
     lda_models = lda_models
@@ -173,8 +172,7 @@ aligned_topics =
 
 names(aligned_topics)
 head(aligned_topics$gamma_alignment)
-# head(aligned_topics$beta_alignment) # not implemented
-
+head(aligned_topics$beta_alignment)
 ```
 
 
