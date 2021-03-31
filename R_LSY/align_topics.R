@@ -26,9 +26,11 @@ align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
   lda_models$gammas = 
     lda_models$gammas %>% 
     left_join(., topics_order, by = c("m", "k_LDA"))
-  lda_models$betas = 
-    lda_models$betas %>% 
-    left_join(., topics_order, by = c("m", "k_LDA"))
+  if("betas" %in% names(lda_models)){
+    lda_models$betas = 
+      lda_models$betas %>% 
+      left_join(., topics_order, by = c("m", "k_LDA"))
+  }
   
   aligned_topics_gamma = 
     aligned_topics_gamma %>% 
