@@ -231,6 +231,14 @@ tree <- generate_tree(n_lev, lambda = 1000)
 topics <- tree_topics(tree)
 ```
 
+### More simulation mechanisms
+
+```{r}
+betas <- repulsion_tree()
+betas <- k_topics(5, 10)
+betas <- topic_curve(10, 3, 10)
+x <- uniform_simplex(100, 10)
+```
 
 # Multimodal simulation
 
