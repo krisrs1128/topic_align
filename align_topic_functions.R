@@ -162,7 +162,7 @@ trim_models =
     }
   }
 
-align_topics = function(data, lda_models, m_ref = NULL, order_constrain = NULL){
+align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
 
   # adding the reference model
   if(is.null(m_ref)) m_ref = lda_models$gammas$m %>% levels() %>% last()
@@ -216,7 +216,7 @@ align_topics = function(data, lda_models, m_ref = NULL, order_constrain = NULL){
   if(condition){
     betas = lda_models$betas
     # betas = betas %>%  ... (add order)
-    aligned_topics_beta = .align_topics_beta(data, betas = betas)
+    aligned_topics_beta = .align_topics_beta(betas = betas)
     ans$beta_alignment = aligned_topics_beta
   }
 
@@ -1126,11 +1126,11 @@ gamma_masses <- function(gammas_long) {
 }
 
 
-transport_align_pair <- function(source, target) {
+transport_align_pair <- function(source, target, ...) {
   C <- pdist(t(source$pos), t(target$pos))
   m1 <- matrix(source$mass, ncol = 1)
   m2 <- matrix(target$mass, ncol = 1)
-  sink_res <- Sinkhorn(m1, m2, as.matrix(C))
+  sink_res <- Sinkhorn(m1, m2, as.matrix(C), ...)
 
   reshape_plan(
     sink_res$Transportplan,

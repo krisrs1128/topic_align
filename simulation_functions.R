@@ -1,13 +1,13 @@
 
 generate_tree <- function(max_level = 4, lambda = 1) {
-  tree <- data.frame(node = 1, parent = NA, leaf = TRUE, level = 0, time = 0, parent_time = NA)
-  
+  tree <- data.frame(node = 1, parent = NA, leaf = TRUE, m = 0, time = 0, parent_time = NA)
+
   while (TRUE) {
     # each leaf has two children
     leaf_nodes <- which(tree$leaf)
     new_ids <- seq(max(tree$node) + 1, max(tree$node) + 1 + 2 * sum(leaf_nodes)) %>%
       matrix(ncol = 2, byrow = TRUE)
-    
+
     # generate new leaves
     descendents <- list()
     for (i in seq_along(leaf_nodes)) {
@@ -16,33 +16,122 @@ generate_tree <- function(max_level = 4, lambda = 1) {
     tree$leaf <- rep(FALSE, nrow(tree))
     tree <- bind_rows(descendents) %>%
       bind_rows(tree)
-    
+
     # check stopping condition
-    if (max(tree$level) >= max_level) break
+    if (max(tree$m) >= max_level) break
   }
+
   tree %>%
-    arrange(node)
+    arrange(node) %>%
+    group_by(m) %>%
+    mutate(
+      m = as.factor(m + 1),
+      K = n(),
+      k_LDA = letters[row_number()],
+      k_LDA_ = letters[row_number()]
+    ) %>%
+    ungroup()
 }
 
 generate_leaves <- function(node, ids, lambda = 1) {
-  result <- data.frame(node = ids, parent = node$node, leaf = TRUE, level = node$level + 1)
+  result <- data.frame(node = ids, parent = node$node, leaf = TRUE, m = node$m + 1)
   result$parent_time <- node$time
   result$time <- node$time + rexp(length(ids), lambda)
   result
 }
 
 tree_topics <- function(tree, V=10) {
- mu <- matrix(0, nrow(tree), V) 
+ mu <- matrix(0, nrow(tree), V)
  tree <- tree %>%
    filter(!is.na(parent)) # remove root
- 
+
  for (i in seq_along(tree$node)) {
    time_delta <- tree$time[i] - tree$parent_time[i]
    mu[tree$node[i], ] <- mu[tree$parent[i], ] + rnorm(V, 0, sqrt(time_delta))
  }
- 
+
  normalize_mu(mu)
 }
+
+#' Simulate with No Topics
+#'
+#' n documents each with own topic uniform on V-dimensional simplex
+uniform_simplex <- function(n, V, n0 = NULL, lambda = 1) {
+  if (is.null(n0)) {
+    n0 <- rpois(n, 1000)
+  }
+
+  x <- matrix(nrow = n, ncol = V)
+  for (i in seq_len(n)) {
+    beta_i <- rdirichlet(1, rep(lambda, V))
+    x[i, ] <- rmultinom(1, n0[i], beta_i)
+  }
+
+  x
+}
+
+#' Simulate Topics along V-Dimensional Curve
+topic_curve <- function(K, k_anchor, V, lambda = 1) {
+  stopifnot(K > k_anchor)
+
+  anchor_topics <- rdirichlet(k_anchor, rep(lambda, V))
+  topics <- matrix(nrow = K, ncol = V)
+  interpolation <- seq(1, k_anchor, length.out = K)
+  for (k in seq_len(K - 1)) {
+    k_prev <- floor(interpolation[k])
+    lambda <- interpolation[k] - k_prev
+    topics[k, ] <- (1 - lambda) * anchor_topics[k_prev, ] + lambda * anchor_topics[k_prev + 1, ]
+  }
+  topics[K, ] <- anchor_topics[k_anchor, ]
+  topics
+}
+
+#' Simulate Standard K-Topics Model
+k_topics <- function(K, V, lambda = 1) {
+  rdirichlet(V, rep(lambda, V))
+}
+
+#' Simulate topics on tree, repelling one another
+repulsion_tree <- function(max_level = 5, V = 10, etas = NULL) {
+  if (is.null(etas)) {
+    etas <- seq(1, 0.1, length.out = max_level + 1)
+  }
+
+  G <- graph.tree(2 ^ max_level - 1) %>%
+    as_tbl_graph() %>%
+    mutate(
+      depth = bfs_dist(1),
+      id = bfs_rank()
+    )
+  node_ids <- pull(G, id)
+  mu <- matrix(0, nrow = length(node_ids), ncol = V)
+
+  # simulate leaves
+  for (i in seq_along(node_ids)) {
+    descendants <- G %>%
+      activate(edges) %>%
+      filter(from == i) %>%
+      pull(to)
+    if (length(descendants) == 0) break
+
+    depth  <- G %>%
+      filter(id == i) %>%
+      pull(depth)
+
+    epsilon <- rnorm(V, 0, etas[depth + 1])
+    mu[descendants[1], ] <- mu[i, ] + epsilon
+    mu[descendants[2], ] <- mu[i, ] - epsilon
+  }
+
+  data.frame(
+    node_id = node_ids,
+    depth = G %>% pull(depth),
+    normalize_mu(mu)
+  ) %>%
+  pivot_longer(-node_id:-depth, names_to = "w", values_to = "b") %>%
+    mutate(w = as.integer(str_replace(w, "X", "")))
+}
+
 
 normalize_mu <- function(mu) {
   beta <- matrix(0, nrow(mu), ncol(mu))
@@ -55,7 +144,7 @@ normalize_mu <- function(mu) {
 
 multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
   stopifnot(min(ks) > 2)
-  
+
   gamma_shared <- matrix(0, n, k_shared)
   for (i in seq_len(n)) {
     v <- rbeta(k_shared, 1, alpha_shared)
@@ -64,7 +153,7 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
       gamma_shared[i, k] <- v[k] * prod(1 - v[1:(k - 1)])
     }
   }
-  
+
   used_up <- rowSums(gamma_shared)
   gammas <- map(ks, ~ matrix(0, n, . - 1))
   for (j in seq_along(gammas)) {
@@ -76,7 +165,7 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
       }
     }
   }
-  
+
   map(gammas, ~ cbind(gamma_shared, .)) %>%
     map(~ cbind(., 1 - rowSums(.))) %>%
     map(~ set_colnames(., letters[1:ncol(.)]))
@@ -87,13 +176,47 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
   if (is.null(n0)) {
     n0 <- rpois(n, 1000)
   }
-  
+
   x <- matrix(nrow = n, ncol = ncol(betas))
   for (i in seq_len(n)) {
-    x[i, ] <- rmultinom(1, n0, t(betas) %*% gammas[i, ])
+    x[i, ] <- rmultinom(1, n0[i], t(betas) %*% gammas[i, ])
   }
   rownames(x) <- seq_len(n)
   colnames(x) <- seq_len(ncol(betas))
   x
 }
 
+beta_list <- function(tree_data, l = 2, prefix = "beta") {
+  tree_data <- tree_data %>%
+    filter(m == l)
+  beta <- tree_data %>%
+    select(matches("[0-9]+")) %>%
+    t()
+  colnames(beta) <- tree_data$node
+  list(mass = rep(1 / ncol(beta), ncol(beta)), pos = beta)
+}
+
+embed_edges <- function(edges, ...) {
+  umap_recipe <- recipe(~ ., edges) %>%
+    update_role(replicate, K, k_LDA, k_LDA_next, edge_weight, new_role = "id") %>%
+    step_umap(all_predictors(), ...)
+
+  prep(umap_recipe)
+}
+
+endpoint_topics <- function(beta, edge_weights) {
+  edge_weights <- edge_weights %>%
+    select(m, m_next, k_LDA, k_LDA_next, w) %>%
+    rename(edge_weight = w, K = m, K_next = m_next)
+
+  wide_topics <- beta %>%
+    select(K, k_LDA, w, b) %>%
+    pivot_wider(K:k_LDA, w, values_from = b, names_prefix = "beta_") %>%
+    mutate(K = as.factor(K))
+
+  edge_weights %>%
+    left_join(wide_topics) %>%
+    left_join(wide_topics, c("K_next" = "K", "k_LDA_next" = "k_LDA")) %>%
+    rename_with(~ gsub(".x$", "_source", .)) %>%
+    rename_with(~ gsub(".y$", "_target", .))
+}
