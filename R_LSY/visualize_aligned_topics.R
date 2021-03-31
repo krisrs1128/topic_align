@@ -126,7 +126,7 @@ visualize_aligned_topics =
    
     
     gammas = aligned_topics$lda_models$gammas
-    betas = aligned_topics$lda_models$betas
+    if("betas" %in% names(aligned_topics$lda_models)) betas = aligned_topics$lda_models$betas
     gamma_alignment = aligned_topics$gamma_alignment
     topic_order = aligned_topics$topics_order
     
@@ -145,11 +145,13 @@ visualize_aligned_topics =
     # if there are no ghost topic, we don't need to do anything.
     if(K_g == 0){
       gammas$is_ghost = FALSE
-      betas$is_ghost = FALSE
+      if("betas" %in% names(aligned_topics$lda_models)) betas$is_ghost = FALSE
       gamma_alignment$is_ghost = FALSE 
       topic_order$is_ghost = FALSE
+      lda_models = list(gammas = gammas)
+      if("betas" %in% names(aligned_topics$lda_models)) lda_models$betas = betas
       return(
-        list(lda_models = list(gammas = gammas, betas = betas),
+        list(lda_models = lda_models,
              gamma_alignment =  gamma_alignment,
              topic_order = topic_order)
       ) 
@@ -213,6 +215,8 @@ visualize_aligned_topics =
     # we need to do two things: 
     # a. define ghost words for the ghost topics
     # b. define the weight of the ghost words and 
+    
+    if("betas" %in% names(aligned_topics$lda_models)){
 
     N_w = length(unique(betas$w)) # First, we count the current number of words
     n_w_per_topic = (N_w/length(actual_ks)) %>% round() # then we compute the average number of words per topic
@@ -239,6 +243,7 @@ visualize_aligned_topics =
         betas_g
       ) %>% 
       arrange(m, branch, k, w) 
+    }
     
     
     # 4. adding the ghost topics to the topic alignment
@@ -279,7 +284,9 @@ visualize_aligned_topics =
     
     # DONE
     # return the updated gammas and betas
-    list(lda_models = list(gammas = gammas, betas = betas),
+    lda_models = list(gammas = gammas)
+    if("betas" %in% names(aligned_topics$lda_models)) lda_models$betas = betas
+    list(lda_models = lda_models,
          gamma_alignment = gamma_alignment,
          topic_order = topic_order)
   }
@@ -287,7 +294,7 @@ visualize_aligned_topics =
 
 .compute_topic_index = function(aligned_topics){
   
-  betas = aligned_topics$lda_models$betas
+  if("betas" %in% names(aligned_topics$lda_models)) betas = aligned_topics$lda_models$betas
   gammas = aligned_topics$lda_models$gammas
   gamma_alignment = aligned_topics$gamma_alignment
   topic_order = aligned_topics$topic_order
@@ -304,7 +311,9 @@ visualize_aligned_topics =
     select(-branch_upper_part, -k_order_for_index)
   
   gammas = gammas %>% left_join(topic_order %>% select(m, topic, k_i), by = c("m","topic"))
-  betas = betas %>% left_join(topic_order %>% select(m, topic, k_i), by = c("m","topic"))
+  if("betas" %in% names(aligned_topics$lda_models)) {
+    betas = betas %>% left_join(topic_order %>% select(m, topic, k_i), by = c("m","topic"))
+  }
   gamma_alignment = 
     gamma_alignment %>% 
     left_join(
@@ -317,7 +326,9 @@ visualize_aligned_topics =
   
   # DONE
   # return the updated gammas and betas
-  list(lda_models = list(gammas = gammas, betas = betas),
+  lda_models = list(gammas = gammas)
+  if("betas" %in% names(aligned_topics$lda_models)) lda_models$betas = betas
+  list(lda_models = lda_models,
        gamma_alignment = gamma_alignment,
        topics_order = topic_order)
   
