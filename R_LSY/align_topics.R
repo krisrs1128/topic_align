@@ -32,39 +32,23 @@ align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
       left_join(., topics_order, by = c("m", "k_LDA"))
   }
 
-  aligned_topics_gamma =
-    aligned_topics_gamma %>%
-    left_join(.,
-              topics_order,
-              by = c("m", "k_LDA")) %>%
-    left_join(.,
-              topics_order %>%
-                dplyr::rename(k_next = k,
-                              k_LDA_next = k_LDA,
-                              m_next = m,
-                              branch_next = branch,
-                              topic_next = topic),
-              by = c("m_next", "k_LDA_next"))
-
-  ans = list(
-    lda_models = lda_models,
-    gamma_alignment = aligned_topics_gamma,
-    topics_order = topics_order
-  )
+  aligned_topics_gamma = .join_order(aligned_topics_gamma, topics_order)
 
   # 3. align topics based on the beta matrices if possible
-  condition = FALSE
-  if(condition){
-    betas = lda_models$betas
-    # betas = betas %>%  ... (add order)
-    aligned_topics_beta = .align_topics_beta(betas = betas)
-    ans$beta_alignment = aligned_topics_beta
-  }
+  # betas = betas %>%  ... (add order)
+  aligned_topics_beta = .align_topics_beta(
+    lda_models$betas,
+    lda_models$gammas
+  )
+  aligned_topics_beta = .join_order(aligned_topics_beta, topics_order)
 
-  ans
+  list(
+    lda_models = lda_models,
+    gamma_alignment = aligned_topics_gamma,
+    topics_order = topics_order,
+    beta_alignment = aligned_topics_beta
+  )
 }
-
-
 
 
 .align_topics_gamma = function(gammas){
@@ -262,7 +246,20 @@ align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
   ordered_topics
 }
 
-
+.join_order <- function(aligned_topics, topics_order) {
+  aligned_topics %>%
+    left_join(.,
+              topics_order,
+              by = c("m", "k_LDA")) %>%
+    left_join(.,
+              topics_order %>%
+                dplyr::rename(k_next = k,
+                              k_LDA_next = k_LDA,
+                              m_next = m,
+                              branch_next = branch,
+                              topic_next = topic),
+              by = c("m_next", "k_LDA_next"))
+}
 
 .define_branches = function(aligned_topics, topic_order){
 
@@ -503,7 +500,8 @@ next_level = function(f, n = 1){
       k_LDA = letters[k],
       k_LDA_next = letters[k_next]
     ) %>%
-    group_by(m, k) %>%
+    group_by(m, k_LDA) %>%
     mutate(norm_weight = weight / sum(weight)) %>%
-    select(m, m_next, k_LDA, k_LDA_next, weight, norm_weight, k, k_next)
+    ungroup() %>%
+    select(m, m_next, k_LDA, k_LDA_next, weight, norm_weight)
 }
