@@ -35,7 +35,6 @@ align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
   aligned_topics_gamma = .join_order(aligned_topics_gamma, topics_order)
 
   # 3. align topics based on the beta matrices if possible
-  # betas = betas %>%  ... (add order)
   aligned_topics_beta = .align_topics_beta(
     lda_models$betas,
     lda_models$gammas
@@ -488,22 +487,23 @@ next_level = function(f, n = 1){
   betas_split <- betas %>%
     split(.$m) %>%
     map(~ pivot_wider(., k_LDA, w, values_from = b) %>% select(-k_LDA))
+  m_ids <- names(betas_split)
 
   masses <- .topic_weights(gammas)
-  M <- length(betas_split)
   W <- list()
-  for (m in seq_len(M - 1)) {
-    W[[m]] <- .beta_weights(betas_split[m:(m + 1)], masses[m:(m + 1)]) %>%
-      mutate(m = m, m_next = m + 1)
+  for (i in seq_len(length(m_ids) - 1)) {
+    W[[i]] <- .beta_weights(betas_split[i:(i + 1)], masses[i:(i + 1)]) %>%
+      mutate(m = m_ids[i], m_next = m_ids[i + 1])
   }
 
-  .beta_alignment_supplement(W)
+  .beta_alignment_supplement(W, gammas)
 }
 
-.beta_alignment_supplement <- function(W) {
+.beta_alignment_supplement <- function(W, gammas) {
   bind_rows(W) %>%
     mutate(
-      across(starts_with("m"), as.factor),
+      m = factor(m, levels = levels(gammas$m)),
+      m_next = factor(m_next, levels = levels(gammas$m)),
       k_LDA = letters[k],
       k_LDA_next = letters[k_next]
     ) %>%

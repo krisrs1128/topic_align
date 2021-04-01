@@ -174,8 +174,6 @@ aligned_topics =
 names(aligned_topics)
 head(aligned_topics$gamma_alignment)
 head(aligned_topics$beta_alignment)
-aligned_topics$beta_alignment %>%
-  filter(is.na(weight))
 ```
 
 

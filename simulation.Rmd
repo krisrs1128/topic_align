@@ -76,7 +76,7 @@ library("tidygraph")
 library("tidymodels")
 library("tidyr")
 library("topicmodels")
-source("align_topic_functions.R")
+source("R_LSY/align_topics_all_functions.R")
 source("simulation_functions.R")
 set.seed(123)
 mytheme <- theme_minimal() + 
@@ -167,6 +167,7 @@ ggplot(fits$betas, aes(x = w, y = reorder(k_LDA_, desc(k_LDA_)), fill = b)) +
 ```{r, fig.cap = "Alignment when using estimated topics.", fig.width = 4, fig.height = 2.5}
 alignment <- align_topics(fits)
 visualize_aligned_topics(alignment)
+visualize_aligned_topics(alignment, method = "beta_alignment")
 ```
 
 ```{r}
@@ -176,7 +177,7 @@ simulate_replicate <- function() {
   endpoint_topics(fits$beta, alignment$gamma_alignment)
 }
   
-edges <- map_dfr(seq_len(50), ~ simulate_replicate(), .id = "replicate")
+edges <- map_dfr(seq_len(10), ~ simulate_replicate(), .id = "replicate")
 edge_fits <- embed_edges(edges)
 ```
 

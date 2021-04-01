@@ -206,8 +206,8 @@ embed_edges <- function(edges, ...) {
 
 endpoint_topics <- function(beta, edge_weights) {
   edge_weights <- edge_weights %>%
-    select(m, m_next, k_LDA, k_LDA_next, w) %>%
-    rename(edge_weight = w, K = m, K_next = m_next)
+    select(m, m_next, k_LDA, k_LDA_next, norm_weight) %>%
+    rename(edge_weight = norm_weight, K = m, K_next = m_next)
 
   wide_topics <- beta %>%
     select(K, k_LDA, w, b) %>%
