@@ -465,8 +465,8 @@ next_level = function(f, n = 1){
 }
 
 .beta_weights <- function(betas, masses) {
-  C <- pdist(betas[[1]], betas[[2]])
-  Sinkhorn(
+  C <- pdist::pdist(betas[[1]], betas[[2]])
+  Barycenter::Sinkhorn(
     masses[[1]],
     masses[[2]],
     as.matrix(C)
