@@ -464,14 +464,20 @@ next_level = function(f, n = 1){
     map(~ matrix(., ncol = 1))
 }
 
-.beta_weights <- function(betas, masses, reg=0.001) {
+.beta_weights <- function(betas, masses, reg=0.01) {
   C <- pdist::pdist(betas[[1]], betas[[2]])
-  Barycenter::Sinkhorn(
+  transport <- Barycenter::Sinkhorn(
     masses[[1]],
     masses[[2]],
     as.matrix(C),
     lambda=reg
-  )$Transportplan %>%
+    )$Transportplan
+
+  if (any(is.na(transport))) {
+    warning("Optimal transport returned NA weights. Consider increasing regularization parameter.")
+  }
+
+  transport %>%
     as_tibble() %>%
     mutate(k = row_number()) %>%
     pivot_longer(-k, names_to = "k_next", values_to = "weight") %>%

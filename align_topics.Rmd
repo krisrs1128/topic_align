@@ -165,6 +165,7 @@ head(lda_models$gammas)
 
 
 ```{r workflow-demo-align-topics}
+source("R_LSY/align_topics_all_functions.R")
 aligned_topics = 
   align_topics(
     lda_models = lda_models
@@ -173,6 +174,8 @@ aligned_topics =
 names(aligned_topics)
 head(aligned_topics$gamma_alignment)
 head(aligned_topics$beta_alignment)
+aligned_topics$beta_alignment %>%
+  filter(is.na(weight))
 ```
 
 
@@ -185,7 +188,6 @@ ggplot(aligned_topics$topics_order, aes(x = m, y = k, col = k_LDA)) +
 
 
 ```{r workflow-demo-viz, fig.width=10, fig.height=8}
-source("R_LSY/align_topics_all_functions.R")
 visualize_aligned_topics(
   aligned_topics = aligned_topics,
   add_leaves = TRUE,
