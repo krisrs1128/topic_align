@@ -185,28 +185,21 @@ ggplot(aligned_topics$topics_order, aes(x = m, y = k, col = k_LDA)) +
 
 
 ```{r workflow-demo-viz, fig.width=10, fig.height=8}
+source("R_LSY/align_topics_all_functions.R")
+visualize_aligned_topics(
+  aligned_topics = aligned_topics,
+  add_leaves = TRUE,
+  min_beta = 0.05,
+  add_words_labels = TRUE
+)
 
-g_aligned_topics = 
-  visualize_aligned_topics(
-    aligned_topics = aligned_topics,
-    add_leaves = TRUE,
-    min_beta = 0.05,
-    add_words_labels = TRUE
-    )
-
-g_aligned_topics
-
-
-# g_aligned_topics = 
-#   visualize_aligned_topics(
-#     aligned_topics = aligned_topics,
-#     add_leaves = FALSE
-#     )
-# 
-# g_aligned_topics
-
-
-
+visualize_aligned_topics(
+  aligned_topics = aligned_topics,
+  add_leaves = TRUE,
+  min_beta = 0.05,
+  add_words_labels = TRUE,
+  method = "beta_alignment"
+)
 
 ```
 

@@ -54,7 +54,6 @@ visualize_aligned_topics =
 
     if(add_leaves){
       leaves_layout = .compute_leaves_layout(aligned_topics, min_k = min_k, max_k = max_k)
-      print(leaves_layout)
 
       layout_rect =
         bind_rows(
