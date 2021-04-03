@@ -198,7 +198,7 @@ beta_list <- function(tree_data, l = 2, prefix = "beta") {
 
 embed_edges <- function(edges, ...) {
   umap_recipe <- recipe(~ ., edges) %>%
-    update_role(replicate, K, k_LDA, k_LDA_next, edge_weight, new_role = "id") %>%
+    update_role(replicate, K, k_LDA, k_LDA_next, edge_weight, method, new_role = "id") %>%
     step_umap(all_predictors(), ...)
 
   prep(umap_recipe)
@@ -219,4 +219,12 @@ endpoint_topics <- function(beta, edge_weights) {
     left_join(wide_topics, c("K_next" = "K", "k_LDA_next" = "k_LDA")) %>%
     rename_with(~ gsub(".x$", "_source", .)) %>%
     rename_with(~ gsub(".y$", "_target", .))
+}
+
+unique_levels <- function(betas) {
+  betas %>%
+    select(node_id, depth) %>%
+    unique() %>%
+    count(depth) %>%
+    pull(n)
 }

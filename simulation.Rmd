@@ -68,8 +68,8 @@ library("embed")
 library("ggplot2")
 library("ggraph")
 library("ggrepel")
+library("igraph")
 library("magrittr")
-library("pdist")
 library("purrr")
 library("stringr")
 library("tidygraph")
@@ -222,47 +222,115 @@ If, between simulation runs, there are edges that link similar pairs of topics,
 then they should appear close to one another in the embedding. We can visually
 encode the weight of these edges by the size of the points. In this way, we can
 study variation in both the learned topics and the weights between them.
+\item In principle, we could link these embeddings with edges corresponding to
+the topic that links them. It's like an inverted version of the tree, each edge
+becomes a node and each node becomes an edge.
+\item This makes me wonder why not just embed the topics directly and overlay
+edges with different weights. I haven't made this plot, but I would be concerned
+that there would be too many overlapping edges. I suspect it is harder to
+compare edge weights when they are drawn as links spread all over the plot than
+when they are drawn as points at a single location.
 \end{enumerate}
 
 ```{r}
-simulate_replicate <- function() {
+simulate_replicate <- function(leaves, gamma) {
   x <- simulate_lda(leaves, gamma)
   fits <- run_lda_models(x, 2 ^ seq(0, n_lev), c(.1), "VEM", 123, reset = TRUE)
-  endpoint_topics(fits$beta, alignment$gamma_alignment)
+  alignment <- align_topics(fits)
+  gamma <- endpoint_topics(fits$beta, alignment$gamma_alignment) %>%
+    mutate(method = "gamma_alignment")
+  beta <- endpoint_topics(fits$beta, alignment$beta_alignment) %>%
+    mutate(method = "beta_alignment")
+  bind_rows(gamma, beta)
 }
   
-edges <- map_dfr(seq_len(10), ~ simulate_replicate(), .id = "replicate")
+edges <- map_dfr(seq_len(50), ~ simulate_replicate(leaves, gamma), .id = "replicate")
 edge_fits <- embed_edges(edges)
 ```
-
-
+ 
+\begin{enumerate}
+\item The figure below\footnote{or above, who knows with Latex} shows an example
+embedding with the topic tree from before. Each column is a different depth in
+the tree, the two rows are alternative alignment strategies. Each circle is an
+edge embedding from one of 50 simulation replicates.
+\item The most obvious pattern is that a few, but not all, edges are
+consistently estimated across simulation replicates. This is visible in the
+difference in transparency between edges. The more transparent edges are linking
+topics that are only found in some of the simulation replicates.
+\item A second observation is that the edge weights for the topic beta alignment
+tree are more nearly sparse than those from the gamma alignment. The circles for
+many beta alignment edges are much smaller. This might be an artifact of how the
+edges are being normalized in the gamma alignment (I should check).
+\end{enumerate}
+ 
 ```{r, fig.height = 5, fig.width = 10, fig.cap = "We can embed edges according to the topics that they link. Each point is an edge from one of 20 simulation replicates, each with new data generated from the same topic tree. Edges that have similar source and target topics are placed close to one another. The size of each point is the weight of that edge. Points have been slightly jittered."}
 edge_scores <- juice(edge_fits) %>%
   mutate(endpoints = str_c(k_LDA, k_LDA_next, sep = "_")) %>%
-  group_by(replicate, K, endpoints) %>%
-  slice_head()
-ggplot(edge_scores, aes(umap_1, umap_2, col = K)) +
+  group_by(replicate, K, endpoints)
+
+ggplot(edge_scores, aes(umap_1, umap_2, col = method)) +
   geom_point(
     aes(size = edge_weight), 
-    alpha = 0.4,
-    position = position_jitter(w = .5, h = .5)
+    alpha = 0.05
+    #position = position_jitter(w = .5, h = .5)
     ) +
+  facet_grid(method ~ K) +
   scale_color_brewer(palette = "Set2") +
   scale_size(range = c(0.1, 6)) +
+  guides(color = guide_legend(override.aes = list(alpha = 1, size = 2))) +
   coord_fixed()
 ```
 
-# Alterantive simulation mechanisms
-
-\begin{enumerate}
-\item 
-\end{enumerate}
+```{r, fig.width = 4, fig.height = 6}
+ggplot(edge_scores %>% filter(replicate %in% 1:5), aes(umap_1, umap_2, col = method)) +
+  geom_point(
+    aes(size = edge_weight), 
+    alpha = 0.4
+    #position = position_jitter(w = .5, h = .5)
+    ) +
+  facet_grid(replicate ~ K) +
+  scale_color_brewer(palette = "Set2") +
+  scale_size(range = c(0.1, 6)) +
+  guides(color = guide_legend(override.aes = list(alpha = 1, size = 2))) +
+  coord_fixed()
+```
 
 ```{r}
-betas <- repulsion_tree()
 betas <- k_topics(5, 10)
 betas <- topic_curve(10, 3, 10)
 x <- uniform_simplex(100, 10)
+```
+
+```{r}
+betas <- repulsion_tree()
+leaves <- betas %>%
+  filter(depth == max(depth)) %>%
+  pivot_wider(node_id, w, values_from = b)
+gamma <- rdirichlet(n, alpha = rep(0.1, nrow(leaves)))
+
+x <- simulate_lda(leaves %>% select(-node_id), gamma)
+fits <- run_lda_models(x, unique_levels(betas), c(.1), "VEM", 123, reset = TRUE)
+alignment <- align_topics(fits)
+visualize_aligned_topics(alignment)
+visualize_aligned_topics(alignment, method = "beta_alignment")
+```
+
+
+
+```{r}
+
+
+simulate_replicate <- function(leaves, gamma) {
+  x <- simulate_lda(leaves, gamma)
+  fits <- run_lda_models(x, 2 ^ seq(0, n_lev), c(.1), "VEM", 123, reset = TRUE)
+  alignment <- align_topics(fits)
+  gamma <- endpoint_topics(fits$beta, alignment$gamma_alignment) %>%
+    mutate(method = "gamma_alignment")
+  beta <- endpoint_topics(fits$beta, alignment$beta_alignment) %>%
+    mutate(method = "beta_alignment")
+  bind_rows(gamma, beta)
+}
+
 ```
 
 
