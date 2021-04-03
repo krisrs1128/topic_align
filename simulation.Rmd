@@ -170,6 +170,60 @@ visualize_aligned_topics(alignment)
 visualize_aligned_topics(alignment, method = "beta_alignment")
 ```
 
+# Evaluation Proposal
+
+\begin{enumerate}
+\item There are two failure modes for topic alignment: we may fail to recover
+reliable topics, and even if we do, we may fail to properly align them across
+levels. It is difficult to give formal definitions for either of these. This is
+because if we simulate from a true topic model, then there can only be one
+"correct" $K$ -- we would be able to evaluate estimation accuracy for that $K$,
+but not the others. Since our algorithm is not positing a specific generative
+mechanism for how topic hierarchies arise, we cannot appeal to the usual
+strategy of (a) simulate from the generative model and (b) verify that
+parameters of the generative model can be recovered, given enough signal.
+\item The problem of trying to evaluate unsupervised methods without a clearly
+specified generative mechanism is not a new one. It arises in evaluation of
+clustering and dimensionality reduction algorithms, and a common approach there
+is to simulate data with some structure known in advance. Studying the resulting
+scores or clusters can be informative. For example, doing this for t-SNE and
+UMAP revealed that the density of points and distances between clusters are not
+captured by the reductions, and so should not be interpreted in real data
+analysis.
+\item Example simulation structure that we can evaluate topic alignment include,
+\begin{enumerate}
+\item Standard topic model at a fixed $K$. There is no real hierarchical
+structure in this data, and it would be interesting to see whether the resulting
+tree sheds any light on this.
+\item A fixed-length topic hierarchy. This is related to the topic tree
+structure from the previous section, but with more control of the resulting
+tree. Specifically, branching times are all fixed in advance (specified by the
+experimenter), and only depend on depth, not which particular descendant subtree
+you belong to. Second, to children topics for a given node, we first simulate a
+random direction associated with a node. One of the children moves in the
+direction for a fixed length, the other moves in the opposite direction for the
+same length.
+\item Topics lying along a high-dimensional curve. There is neither hierarchical
+nor topic structure here. We expect the algorithm to fit a few topics along the
+curve, adding more topics intermediate between these as $K$ increases.
+\item Completely uniform on simplex. There is no low-dimensional structure here.
+This is a relevant reference because we want to make sure we aren't fooled into
+reading topic structure in our figures when in fact there is none.
+\end{enumerate}
+\item Once we run these simulations, we can simply visualize the resulting tree.
+However, there is always the question of how things would turn out if we
+simulated it again -- illustration data are random, after all. If we just
+repeat the experiment many times, then we would have too many trees to be able
+to look at all of them at once.
+\item To resolve this, we propose embedding edges from all the simulation
+replicates. We represent each edge by the topic vectors that they link. We can
+reduce the dimensionality of these $2V$-dimensional vectors and visualize them.
+If, between simulation runs, there are edges that link similar pairs of topics,
+then they should appear close to one another in the embedding. We can visually
+encode the weight of these edges by the size of the points. In this way, we can
+study variation in both the learned topics and the weights between them.
+\end{enumerate}
+
 ```{r}
 simulate_replicate <- function() {
   x <- simulate_lda(leaves, gamma)
@@ -198,41 +252,11 @@ ggplot(edge_scores, aes(umap_1, umap_2, col = K)) +
   coord_fixed()
 ```
 
-\begin{enumerate}
-\item It's not clear how to compare the fitted with the true set of topics,
-because we would need to account for two sources of error: failure to recover
-the correct topics or failure to align. It would be simpler if we could decouple
-these different sources of error.
-\item For the second, we could align the true topics as they are, to see if they
-recover the tree. This is easy to understand, but leaves us open to the
-criticism that alignment might collapse if there are even small errors in
-recovered topics.
-\item For the first, we could compute the likelihood of new data under the true
-and recovered topics\footnote{We would have to identify reasonable choices of
-$\gamma_{i}$ in the new data, perhaps regressing documents onto topics?}. \item
-To get towards the second item above, we will ignore `x` for now, focusing
-solely on the simulated topic tree. I arbitrarily set all the topic weights
-equal to one another.
-\end{enumerate}
+# Alterantive simulation mechanisms
 
 \begin{enumerate}
-\item It seems that for the tree constructed above, it's easy to reconstruct the
-alignment. Is there a point at which it breaks down? A more challenging
-situation will be necessary in order to fruitfully compare competing approaches.
-\item One way to make the problem harder is to give less time for the topics to
-evolve along the tree. This can be accomplished by reducing the mean of the
-exponential branching times. It would be interesting to estimate these
-alignments along a sequence of increasingly challenging problems, in the spirit
-of Le Cam's LAN.
-\item This intuition is confirmed in the figure below.
+\item 
 \end{enumerate}
-
-```{r, fig.width = 4, fig.height = 2.5, fig.cap = "Topic alignments deteriorate when the amount of time given to evolve is reduced."}
-tree <- generate_tree(n_lev, lambda = 1000)
-topics <- tree_topics(tree)
-```
-
-### More simulation mechanisms
 
 ```{r}
 betas <- repulsion_tree()
@@ -240,6 +264,7 @@ betas <- k_topics(5, 10)
 betas <- topic_curve(10, 3, 10)
 x <- uniform_simplex(100, 10)
 ```
+
 
 # Multimodal simulation
 
