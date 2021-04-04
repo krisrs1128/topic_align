@@ -140,7 +140,7 @@ recover hierarchical structure in the more clustered setting, we choose $\alpha
 ```{r}
 leaves <- cbind(tree, topics) %>%
   filter(leaf) %>%
-  dplyr::select(`1`:`10`)
+  select(-node, -parent, -leaf, -m, -parent_time, -K, -k_LDA, -k_LDA_)
 n <- 100
 gamma <- rdirichlet(n, alpha = rep(0.1, nrow(leaves)))
 colnames(gamma) <- seq(2 ^ n_lev, 2 ^ (n_lev + 1) - 1)
@@ -233,18 +233,21 @@ when they are drawn as points at a single location.
 \end{enumerate}
 
 ```{r}
-simulate_replicate <- function(leaves, gamma) {
-  x <- simulate_lda(leaves, gamma)
-  fits <- run_lda_models(x, 2 ^ seq(0, n_lev), c(.1), "VEM", 123, reset = TRUE)
-  alignment <- align_topics(fits)
-  gamma <- endpoint_topics(fits$beta, alignment$gamma_alignment) %>%
-    mutate(method = "gamma_alignment")
-  beta <- endpoint_topics(fits$beta, alignment$beta_alignment) %>%
-    mutate(method = "beta_alignment")
-  bind_rows(gamma, beta)
+simulate_replicate <- function(beta, gamma, K_max = 8) {
+  x <- simulate_leaves(beta, gamma)
+  wrapper <- vis_wrapper(x, K_max)
+  endpoint_topics(wrapper$fits$beta, wrapper$alignment)
 }
-  
-edges <- map_dfr(seq_len(50), ~ simulate_replicate(leaves, gamma), .id = "replicate")
+
+beta <- cbind(tree, topics) %>%
+  pivot_longer(-node:-k_LDA_, names_to = "w", values_to = "b") %>%
+  mutate(
+    node_id = node,
+    w = as.numeric(str_extract(w, "[0-9]+")),
+    depth = as.integer(as.character(m))
+  )
+
+edges <- map_dfr(seq_len(5), ~ simulate_replicate(beta, gamma), .id = "replicate")
 edge_fits <- embed_edges(edges)
 ```
  
@@ -262,16 +265,51 @@ tree are more nearly sparse than those from the gamma alignment. The circles for
 many beta alignment edges are much smaller. This might be an artifact of how the
 edges are being normalized in the gamma alignment (I should check).
 \end{enumerate}
+
+```{r}
+# construct the edge weights for the true underlying tree
+G <- graph.tree(2 ^ 4 - 1) %>%
+  as_tbl_graph() %>%
+  mutate(
+    depth = bfs_dist(1),
+    m = 2 ^ depth,
+    id = bfs_rank(),
+    k = c(1, 1:2, 1:4, 1:8)
+  )
+
+G_edges <- activate(G, edges) %>%
+  as_tibble()
+
+edge_weights <- G_edges %>%
+  left_join(as_tibble(G), by = c("from" = "id")) %>%
+  left_join(as_tibble(G), by = c("to" = "id")) %>%
+  rename(m = m.x, m_next = m.y, k_LDA = k.x, k_LDA_next = k.y) %>%
+  select(m, m_next, k_LDA, k_LDA_next, depth.y) %>%
+  mutate(norm_weight = 1 / (2 ^ depth.y)) %>%
+  mutate(m = as.factor(m), m_next = as.factor(m_next)) %>%
+  select(-depth.y)
+
+# construct the joined topics for the true underlying tree
+topics_flat <- cbind(tree, topics) %>%
+  mutate(k_LDA = c(1, 1:2, 1:4, 1:8)) %>%
+  select(K, k_LDA, `1`:`10`) %>%
+  pivot_longer(-K:-k_LDA, names_to = "w", values_to = "b")
+beta_true <- endpoint_topics_(topics_flat, edge_weights) %>%
+  mutate(replicate = 1, method = "truth")
+
+edge_fits2 <- embed_edges(rbind(edges, beta_true))
+```
+
  
 ```{r, fig.height = 5, fig.width = 10, fig.cap = "We can embed edges according to the topics that they link. Each point is an edge from one of 20 simulation replicates, each with new data generated from the same topic tree. Edges that have similar source and target topics are placed close to one another. The size of each point is the weight of that edge. Points have been slightly jittered."}
-edge_scores <- juice(edge_fits) %>%
+edge_scores <- juice(edge_fits2) %>%
   mutate(endpoints = str_c(k_LDA, k_LDA_next, sep = "_")) %>%
   group_by(replicate, K, endpoints)
 
 ggplot(edge_scores, aes(umap_1, umap_2, col = method)) +
   geom_point(
     aes(size = edge_weight), 
-    alpha = 0.05
+    alpha = 0.6
     #position = position_jitter(w = .5, h = .5)
     ) +
   facet_grid(method ~ K) +
@@ -303,34 +341,35 @@ x <- uniform_simplex(100, 10)
 
 ```{r}
 betas <- repulsion_tree()
-leaves <- betas %>%
-  filter(depth == max(depth)) %>%
-  pivot_wider(node_id, w, values_from = b)
-gamma <- rdirichlet(n, alpha = rep(0.1, nrow(leaves)))
-
-x <- simulate_lda(leaves %>% select(-node_id), gamma)
-fits <- run_lda_models(x, unique_levels(betas), c(.1), "VEM", 123, reset = TRUE)
-alignment <- align_topics(fits)
-visualize_aligned_topics(alignment)
-visualize_aligned_topics(alignment, method = "beta_alignment")
+gamma <- rdirichlet(100, alpha = rep(0.1, 8))
+x <- simulate_leaves(betas, gamma)
+vis_wrapper(x, 8)
 ```
 
-
+```{r}
+x_star <- uniform_simplex(50)
+vis_wrapper(x_star, 8)
+```
 
 ```{r}
+betas <- k_topics(4)
+gamma <- rdirichlet(50, alpha = rep(0.1, 4))
+x <- simulate_leaves(betas, gamma)
+vis_wrapper(x, 6)
+```
+```{r}
+betas <- topic_curve(5, 3)
+gamma <- rdirichlet(50, alpha = rep(0.1, 5))
+x <- simulate_leaves(betas, gamma)
+vis_wrapper(x, 6)
+```
 
-
-simulate_replicate <- function(leaves, gamma) {
-  x <- simulate_lda(leaves, gamma)
-  fits <- run_lda_models(x, 2 ^ seq(0, n_lev), c(.1), "VEM", 123, reset = TRUE)
-  alignment <- align_topics(fits)
-  gamma <- endpoint_topics(fits$beta, alignment$gamma_alignment) %>%
-    mutate(method = "gamma_alignment")
-  beta <- endpoint_topics(fits$beta, alignment$beta_alignment) %>%
-    mutate(method = "beta_alignment")
-  bind_rows(gamma, beta)
-}
-
+```{r}
+betas <- repulsion_tree()
+#gamma <- rdirichlet(100, alpha = rep(0.1, 8))
+#x <- simulate_leaves(betas, gamma)
+#vis_wrapper(x, 8)
+head(betas)
 ```
 
 

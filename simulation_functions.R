@@ -56,12 +56,14 @@ tree_topics <- function(tree, V=10) {
 #' Simulate with No Topics
 #'
 #' n documents each with own topic uniform on V-dimensional simplex
-uniform_simplex <- function(n, V, n0 = NULL, lambda = 1) {
+uniform_simplex <- function(n, V = 500, n0 = NULL, lambda = 1) {
   if (is.null(n0)) {
     n0 <- rpois(n, 1000)
   }
 
   x <- matrix(nrow = n, ncol = V)
+  colnames(x) <- seq_len(V)
+  rownames(x) <- seq_len(n)
   for (i in seq_len(n)) {
     beta_i <- rdirichlet(1, rep(lambda, V))
     x[i, ] <- rmultinom(1, n0[i], beta_i)
@@ -71,7 +73,7 @@ uniform_simplex <- function(n, V, n0 = NULL, lambda = 1) {
 }
 
 #' Simulate Topics along V-Dimensional Curve
-topic_curve <- function(K, k_anchor, V, lambda = 1) {
+topic_curve <- function(K, k_anchor, V = 500, lambda = 1) {
   stopifnot(K > k_anchor)
 
   anchor_topics <- rdirichlet(k_anchor, rep(lambda, V))
@@ -83,16 +85,26 @@ topic_curve <- function(K, k_anchor, V, lambda = 1) {
     topics[k, ] <- (1 - lambda) * anchor_topics[k_prev, ] + lambda * anchor_topics[k_prev + 1, ]
   }
   topics[K, ] <- anchor_topics[k_anchor, ]
-  topics
+  flatten_beta(topics)
+}
+
+flatten_beta <- function(beta) {
+  beta %>%
+    as_tibble() %>%
+    mutate(K = row_number(), node_id = K, depth = 1) %>%
+    pivot_longer(-K:-depth, names_to = "w", values_to = "b") %>%
+    mutate(w = as.integer(str_extract(w, "[0-9]+")))
 }
 
 #' Simulate Standard K-Topics Model
-k_topics <- function(K, V, lambda = 1) {
-  rdirichlet(V, rep(lambda, V))
+k_topics <- function(K, V = 500, lambda = 1) {
+  rdirichlet(K, rep(lambda, V)) %>%
+    flatten_beta()
 }
+  
 
 #' Simulate topics on tree, repelling one another
-repulsion_tree <- function(max_level = 5, V = 10, etas = NULL) {
+repulsion_tree <- function(max_level = 4, V = 500, etas = NULL) {
   if (is.null(etas)) {
     etas <- seq(1, 0.1, length.out = max_level + 1)
   }
@@ -119,8 +131,8 @@ repulsion_tree <- function(max_level = 5, V = 10, etas = NULL) {
       pull(depth)
 
     epsilon <- rnorm(V, 0, etas[depth + 1])
-    mu[descendants[1], ] <- mu[i, ] + epsilon
-    mu[descendants[2], ] <- mu[i, ] - epsilon
+    mu[descendants[1], ] <- mu[i, ] + epsilon / sqrt(sum(epsilon ^ 2))
+    mu[descendants[2], ] <- mu[i, ] - epsilon / sqrt(sum(epsilon ^ 2))
   }
 
   data.frame(
@@ -204,11 +216,11 @@ embed_edges <- function(edges, ...) {
   prep(umap_recipe)
 }
 
-endpoint_topics <- function(beta, edge_weights) {
+endpoint_topics_ <- function(beta, edge_weights) {
   edge_weights <- edge_weights %>%
     select(m, m_next, k_LDA, k_LDA_next, norm_weight) %>%
     rename(edge_weight = norm_weight, K = m, K_next = m_next)
-
+  
   wide_topics <- beta %>%
     select(K, k_LDA, w, b) %>%
     pivot_wider(K:k_LDA, w, values_from = b, names_prefix = "beta_") %>%
@@ -221,10 +233,29 @@ endpoint_topics <- function(beta, edge_weights) {
     rename_with(~ gsub(".y$", "_target", .))
 }
 
-unique_levels <- function(betas) {
-  betas %>%
-    select(node_id, depth) %>%
-    unique() %>%
-    count(depth) %>%
-    pull(n)
+endpoint_topics <- function(beta, alignment) {
+  align1 <- endpoint_topics_(beta, alignment$gamma_alignment) %>%
+    mutate(method = "gamma_alignment")
+  align2 <- endpoint_topics_(beta, alignment$beta_alignment) %>%
+    mutate(method = "beta_alignment")
+  bind_rows(align1, align2)
+}
+
+simulate_leaves <- function(betas, gamma) {
+  leaves <- betas %>%
+    filter(depth == max(depth)) %>%
+    pivot_wider(node_id, w, values_from = b) %>%
+    select(-node_id)
+  simulate_lda(leaves, gamma)
+}
+
+vis_wrapper <- function(x, K_max) {
+  fits <- run_lda_models(x, 1:K_max, c(.1), "VEM", 123, reset = TRUE)
+  alignment <- align_topics(fits)
+  list(
+    fits = fits,
+    alignment = alignment,
+    p1 = visualize_aligned_topics(alignment),
+    p2 = visualize_aligned_topics(alignment, method = "beta_alignment")
+  )
 }
