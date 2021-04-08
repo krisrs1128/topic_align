@@ -16,49 +16,6 @@ define a distance between learned alignments and specify which choices lead to
 similar and different alignments. Ideally, we could also say something about
 whether one alignment is ``better'' than another, but I'm not worried if we
 can't answer this definitively.
-\item Strategy 1 [Ordinary LDA]: We could just simulate from an LDA model with a
-fixed $K$. This sounds a little silly -- why bother with alignment? -- but the
-truth is we'd never know $K$ in practice, so the alignment exercise could still
-be productive. This simulation is also useful if we want to illustrate how
-refinements (and their associated metrics) look before and after the true $K$ is
-hit.
-\item Something I don't like about just simulating from a fixed $K$ is that
-people might then become fixated on choosing the ``right'' $K$, which is
-inimical\footnote{To use a word I just learned.} to the whole point of the
-study. I'd like to argue that none of the choices of $K$ are true, but for a
-given purpose, there might be a few ranges of $K$ where results are similar.
-\end{enumerate}
-
-# Strategy 2: Branching $\beta$'s
-\begin{enumerate}
-\item For this reason, a more complex setup might be useful. The idea in this
-strategy is to simulate topics that branch off from one another over time. We
-would simulate documents from the topics at the leaves. However, since we know
-the overall branching structure, we can argue that topics with a similar
-most-recent-common-ancestor should appear closer to one another in our diagram.
-Further, it would be interesting if the intermediate branches on the tree are
-somehow recovered when estimating with smaller $K$.
-\item How to implement strategy 2, specifically? We can define something
-inductively. Start with a $\mu_{0} = 0$. Given a tree of means, we simulate a
-new leaf node according to
-\begin{align*}
-\mu_{i} \vert \mu_{\mathcal{P}\left(i\right)} &\sim \Gsn\left(\mu_{i} \vert \mu_{\mathcal{P}\left(i\right)}, T_{\mathcal{P}\left(i\right)} I_{d}\right)
-\end{align*}
-where $T_{\mathcal{P}\left(i\right)}$ denotes the time elapsed between the
-parent node $\mathcal{P}\left(i\right)$ and all its children.
-\item To fully specify this, we need to determine (i) the $T_i$'s and (ii) the
-number of children for each node. For (i), we just simulate $T_i \sim
-\text{Expo}\left(\lambda\right)$, and for (ii) we just always choose 2. \item
-This is a simulation in $\reals^{V}$, but our data have to lie on $\simplex^{V -
-1}$. So, let's squash all the means onto the simplex. Specifically, suppose $L$
-indexes all the leaf nodes. Then we define topics according to,
-\begin{align*}
-\beta_{l} := \frac{\exp{\mu_{l}}}{\sum_{l^{\prime} \in L} \exp{\mu_{l^{\prime}}}},
-\end{align*}
-where $\exp{}$ is applied elementwise.
-\end{enumerate}
-
-# What does strategy 2 look like?
 
 ```{r}
 library("Barycenter")
@@ -66,14 +23,7 @@ library("MCMCpack")
 library("dplyr")
 library("embed")
 library("ggplot2")
-library("ggraph")
-library("ggrepel")
-library("igraph")
-library("magrittr")
 library("purrr")
-library("stringr")
-library("tidygraph")
-library("tidymodels")
 library("tidyr")
 library("topicmodels")
 source("R_LSY/align_topics_all_functions.R")
@@ -87,87 +37,6 @@ mytheme <- theme_minimal() +
     legend.position = "bottom"
   )
 theme_set(mytheme)
-```
-
-```{r}
-n_lev <- 3
-tree <- generate_tree(n_lev)
-topics <- tree_topics(tree)
-```
-
-```{r, fig.cap = "A simulated tree. Larger jumps in time will lead to larger differences between parent and child topics."}
-ggplot(tree %>% mutate(m = as.numeric(m)), aes(x = m, y = time)) +
-  geom_segment(aes(xend = m - 1, yend = parent_time), col = "#d3d3d3") +
-  geom_point() +
-  geom_text_repel(aes(label = node))
-```
-
-```{r, fig.cap = "Topics associated with tree nodes, at the three simulated levels (plus root). Notice that neighboring rows tend to have similar b[k,v]'s.", echo = FALSE, fig.height = 3, fig.width = 4}
-cbind(tree, topics) %>%
-  pivot_longer(cols = c(`1`:`10`), names_to = "v") %>%
-  ggplot() +
-  geom_tile(aes(x = v, fill = value, y = as.factor(node)), stat = "identity") +
-  facet_grid(m ~ ., scale = "free_y", space = "free") +
-  labs(x = "word", y = "Tree Node") +
-  scale_y_discrete(expand = c(0, 0)) +
-  scale_x_discrete(expand = c(0, 0)) +
-  scale_fill_distiller(direction = 1) +
-  theme(
-    panel.spacing=unit(.05, "lines"),
-    panel.border = element_rect(color = "black", fill = NA, size = 1),
-    strip.background = element_rect(color = "black", size = 1),
-    axis.text.y = element_blank(),
-    axis.ticks.y = element_blank()
-  )
-```
-
-# Counts from Branching $\beta$'s
-
-\begin{enumerate}
-\item Given these $\beta$'s, we can simulate a dataset of counts $\*X\in
-\reals^{n \times V}$. We simulate $\gamma_{i} \sim \text{Dir}\left(\alpha
-\*1_{K}\right)$ and then draw $\*x_{i} \sim \text{Mult}\left(n_{0},
-B\gamma_{i}\right)$ where $B \in \reals^{V \times K}$ concatenates all the
-topics horizontally.
-\item A larger $\alpha$ creates $\gamma_{i}$'s across the full polytope whose
-corners are $\beta_{k}$. Smaller $\alpha$ encourages $\gamma_{i}$ to concentrate
-at corners or edges of this polytope. The choice of $\alpha$ basically
-interpolates between gradient and clustering structure. Since it seems easier to
-recover hierarchical structure in the more clustered setting, we choose $\alpha
-= 0.1$.
-\end{enumerate}
-
-```{r}
-leaves <- cbind(tree, topics) %>%
-  filter(leaf) %>%
-  select(-node, -parent, -leaf, -m, -parent_time, -K, -k_LDA, -k_LDA_)
-n <- 100
-gamma <- rdirichlet(n, alpha = rep(0.1, nrow(leaves)))
-colnames(gamma) <- seq(2 ^ n_lev, 2 ^ (n_lev + 1) - 1)
-x <- simulate_lda(leaves, gamma)
-fits <- run_lda_models(x, 2 ^ seq(0, n_lev), c(.1), "VEM", 123, reset = TRUE)
-```
-
-```{r, fig.cap = "Example fitted topics, from the branching scenario.", echo = FALSE, fig.width = 4, fig.height = 3}
-fits$betas$k_LDA_ <- as.factor(fits$betas$k_LDA)
-ggplot(fits$betas, aes(x = w, y = reorder(k_LDA_, desc(k_LDA_)), fill = b)) +
-  geom_tile() +
-  facet_grid(m ~ ., scale = "free", space = "free") +
-  labs(x = "word", y = "topic") +
-  scale_y_discrete(expand = c(0, 0)) +
-  scale_x_discrete(expand = c(0, 0)) +
-  scale_fill_distiller(direction = 1) +
-  theme(
-    panel.spacing=unit(.05, "lines"),
-    panel.border = element_rect(color = "black", fill = NA, size = 1),
-    strip.background = element_rect(color = "black", size = 1),
-    axis.ticks.y = element_blank()
-  )
-```
-```{r, fig.cap = "Alignment when using estimated topics.", fig.width = 4, fig.height = 2.5}
-alignment <- align_topics(fits)
-visualize_aligned_topics(alignment)
-visualize_aligned_topics(alignment, method = "beta_alignment")
 ```
 
 # Evaluation Proposal
@@ -233,21 +102,25 @@ when they are drawn as points at a single location.
 \end{enumerate}
 
 ```{r}
-simulate_replicate <- function(beta, gamma, K_max = 8) {
-  x <- simulate_leaves(beta, gamma)
-  wrapper <- vis_wrapper(x, K_max)
-  endpoint_topics(wrapper$fits$beta, wrapper$alignment)
-}
+tree <- generate_tree()
+betas <- tree_topics(tree)
+true_links <- make_links(tree, betas)
 
-beta <- cbind(tree, topics) %>%
-  pivot_longer(-node:-k_LDA_, names_to = "w", values_to = "b") %>%
-  mutate(
-    node_id = node,
-    w = as.numeric(str_extract(w, "[0-9]+")),
-    depth = as.integer(as.character(m))
-  )
+beta <- betas %>%
+  filter(m == max(m)) %>%
+  select(-m, -k)
+gammas <- rdirichlet(100, rep(0.05, nrow(beta)))
+x <- simulate_lda(beta, gammas)
+wrapper <- vis_wrapper(x, max(betas$m))
+wrapper
+```
 
-edges <- map_dfr(seq_len(5), ~ simulate_replicate(beta, gamma), .id = "replicate")
+
+```{r}
+beta_hats <- widen_betas(wrapper$fits$betas)
+edges <- endpoint_topics(beta_hats, wrapper$alignment) %>%
+  mutate(replicate = 1)
+#edges <- map_dfr(seq_len(5), ~ simulate_replicate(beta, gamma), .id = "replicate")
 edge_fits <- embed_edges(edges)
 ```
  
@@ -265,54 +138,18 @@ tree are more nearly sparse than those from the gamma alignment. The circles for
 many beta alignment edges are much smaller. This might be an artifact of how the
 edges are being normalized in the gamma alignment (I should check).
 \end{enumerate}
-
-```{r}
-# construct the edge weights for the true underlying tree
-G <- graph.tree(2 ^ 4 - 1) %>%
-  as_tbl_graph() %>%
-  mutate(
-    depth = bfs_dist(1),
-    m = 2 ^ depth,
-    id = bfs_rank(),
-    k = c(1, 1:2, 1:4, 1:8)
-  )
-
-G_edges <- activate(G, edges) %>%
-  as_tibble()
-
-edge_weights <- G_edges %>%
-  left_join(as_tibble(G), by = c("from" = "id")) %>%
-  left_join(as_tibble(G), by = c("to" = "id")) %>%
-  rename(m = m.x, m_next = m.y, k_LDA = k.x, k_LDA_next = k.y) %>%
-  select(m, m_next, k_LDA, k_LDA_next, depth.y) %>%
-  mutate(norm_weight = 1 / (2 ^ depth.y)) %>%
-  mutate(m = as.factor(m), m_next = as.factor(m_next)) %>%
-  select(-depth.y)
-
-# construct the joined topics for the true underlying tree
-topics_flat <- cbind(tree, topics) %>%
-  mutate(k_LDA = c(1, 1:2, 1:4, 1:8)) %>%
-  select(K, k_LDA, `1`:`10`) %>%
-  pivot_longer(-K:-k_LDA, names_to = "w", values_to = "b")
-beta_true <- endpoint_topics_(topics_flat, edge_weights) %>%
-  mutate(replicate = 1, method = "truth")
-
-edge_fits2 <- embed_edges(rbind(edges, beta_true))
-```
-
  
 ```{r, fig.height = 5, fig.width = 10, fig.cap = "We can embed edges according to the topics that they link. Each point is an edge from one of 20 simulation replicates, each with new data generated from the same topic tree. Edges that have similar source and target topics are placed close to one another. The size of each point is the weight of that edge. Points have been slightly jittered."}
-edge_scores <- juice(edge_fits2) %>%
-  mutate(endpoints = str_c(k_LDA, k_LDA_next, sep = "_")) %>%
-  group_by(replicate, K, endpoints)
+edge_scores <- juice(edge_fits) %>%
+  mutate(endpoints = str_c(k, k_next, sep = "_"))
 
 ggplot(edge_scores, aes(umap_1, umap_2, col = method)) +
   geom_point(
-    aes(size = edge_weight), 
+    #aes(size = edge_weight), 
     alpha = 0.6
     #position = position_jitter(w = .5, h = .5)
     ) +
-  facet_grid(method ~ K) +
+  facet_grid(method ~ k) +
   scale_color_brewer(palette = "Set2") +
   scale_size(range = c(0.1, 6)) +
   guides(color = guide_legend(override.aes = list(alpha = 1, size = 2))) +
@@ -340,13 +177,6 @@ x <- uniform_simplex(100, 10)
 ```
 
 ```{r}
-betas <- repulsion_tree()
-gamma <- rdirichlet(100, alpha = rep(0.1, 8))
-x <- simulate_leaves(betas, gamma)
-vis_wrapper(x, 8)
-```
-
-```{r}
 x_star <- uniform_simplex(50)
 vis_wrapper(x_star, 8)
 ```
@@ -355,23 +185,26 @@ vis_wrapper(x_star, 8)
 betas <- k_topics(4)
 gamma <- rdirichlet(50, alpha = rep(0.1, 4))
 x <- simulate_leaves(betas, gamma)
-vis_wrapper(x, 6)
-```
-```{r}
-betas <- topic_curve(5, 3)
-gamma <- rdirichlet(50, alpha = rep(0.1, 5))
-x <- simulate_leaves(betas, gamma)
-vis_wrapper(x, 6)
+result <- vis_wrapper(x, 6)
+
+names(result)
 ```
 
-```{r}
-betas <- repulsion_tree()
-#gamma <- rdirichlet(100, alpha = rep(0.1, 8))
-#x <- simulate_leaves(betas, gamma)
-#vis_wrapper(x, 8)
-head(betas)
-```
+```{r, fig.width = 6, fig.height = 6}
+weight_comparison <- bind_rows(
+  result$alignment$gamma_alignment %>%
+    mutate(method = "gamma_alignment"),
+  result$alignment$beta_alignment %>%
+    mutate(method = "beta_alignment")
+) %>%
+  select(m, k_LDA, k_LDA_next, method, norm_weight) %>%
+  pivot_wider(m:k_LDA_next, names_from = "method", values_from = "norm_weight")
 
+ggplot(weight_comparison, aes(gamma_alignment, beta_alignment)) +
+  geom_abline(slope = 1) +
+  geom_point(aes(col = m)) +
+  coord_fixed()
+```
 
 # Multimodal simulation
 
@@ -412,10 +245,4 @@ mode can be perfectly matched to the shared topics in the other.
 ```{r}
 gammas <- multimodal_gammas(100, c(3, 3),c(3, 3), k_shared = 4, alpha_shared = 3)
 map(gammas, head)
-```
-
-```{r}
-source <- list(pos = gammas[[1]], mass = rep(1, ncol(gammas[[1]])))
-target <- list(pos = gammas[[2]], mass = rep(1, ncol(gammas[[2]])))
-transport_align_pair(source, target, lambda = 0.01)
 ```
