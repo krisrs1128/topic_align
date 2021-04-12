@@ -105,7 +105,7 @@ when they are drawn as points at a single location.
 
 ```{r}
 tree <- generate_tree()
-betas <- tree_topics(tree, V = 10)
+betas <- tree_topics(tree, V = 500)
 links <- tree_links(tree, betas)
 leaves <- betas %>%
   filter(m == max(as.numeric(m))) %>%
@@ -119,7 +119,7 @@ wrapper[c("p1", "p2")]
 ```{r}
 edges <- map_dfr(c("beta_alignment", "gamma_alignment"), ~ mutate(links, method = ., estimate = FALSE)) %>%
   bind_rows(simulate_replicates(leaves, gammas, 2) %>% mutate(estimate = TRUE))
-edge_fits <- embed_edges(edges, min_dist = 0.5, neighbors = 15)
+edge_fits <- embed_edges(edges, min_dist = 0.5, neighbors = 4)
 ```
 
 \begin{enumerate}
@@ -150,18 +150,8 @@ ggplot(juice(edge_fits), aes(umap_1, umap_2)) +
   coord_fixed()
 ```
 
-```{r, fig.width = 4, fig.height = 6}
-ggplot(edge_scores %>% filter(replicate %in% 1:5), aes(umap_1, umap_2, col = method)) +
-  geom_point(
-    aes(size = weight), 
-    alpha = 0.4
-    #position = position_jitter(w = .5, h = .5)
-    ) +
-  facet_grid(replicate ~ K) +
-  scale_color_brewer(palette = "Set2") +
-  scale_size(range = c(0.1, 6)) +
-  guides(color = guide_legend(override.aes = list(alpha = 1, size = 2))) +
-  coord_fixed()
+```{r}
+edges
 ```
 
 ```{r}
