@@ -3,7 +3,7 @@
 generate_tree <- function(n_levels = 6, edge_lengths = rep(1, 6)) {
   result <- list()
   result[[1]] <- tibble(m = 1, m_next = 2, k = 1, k_next = 1:2)
-  
+
   for (k in seq(n_levels - 1)) {
     conserved <- tibble(m = k + 1, m_next = k + 2, k = seq_len(k + 1))
     branched <- tibble(m = k + 1, m_next = k + 2, k = sample(k + 1, 1))
@@ -11,7 +11,7 @@ generate_tree <- function(n_levels = 6, edge_lengths = rep(1, 6)) {
       arrange(k) %>%
       mutate(k_next = row_number())
   }
-  
+
   bind_rows(result) %>%
     mutate(weight = 1 / m_next) %>%
     mutate(across(starts_with("m"), as.factor))
@@ -23,13 +23,13 @@ tree_topics <- function(tree, V=10, sigmas=NULL) {
   if (is.null(sigmas)) {
     sigmas <- rep(1, n_distinct(tree$m))
   }
-  
+
   for (i in seq_len(nrow(tree))) {
     m_star <- tree$m[i]
     m_next <- as.character(tree$m_next[i])
-    
+
     if (!(m_next %in% names(mu))) {
-      K <- tree %>% 
+      K <- tree %>%
         filter(m == m_star) %>%
         slice_max(k_next) %>%
         pull(k_next)
@@ -37,7 +37,7 @@ tree_topics <- function(tree, V=10, sigmas=NULL) {
     }
     mu[[m_next]][tree$k_next[i], ] <- child_topic(mu[[m_star]][tree$k[i], ], sigmas[m_star])
   }
-  
+
   beta <- map(mu, ~ exp(.) / rowSums(exp(.)))
   map_dfr(beta, as_tibble, .id = "m") %>%
     group_by(m) %>%
@@ -72,7 +72,7 @@ tree_links <- function(edges, betas) {
       rename_all(~ str_c("target_", .))
     result[[i]] <- bind_cols(source, target)
   }
-  
+
   edges %>%
     bind_cols(bind_rows(result))
 }
@@ -125,7 +125,7 @@ k_topics <- function(K, V = 500, lambda = 1) {
   rdirichlet(K, rep(lambda, V)) %>%
     flatten_beta()
 }
-  
+
 
 normalize_mu <- function(mu) {
   beta <- matrix(0, nrow(mu), ncol(mu))
