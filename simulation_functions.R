@@ -2,10 +2,8 @@
 #' Tree with one split per level
 generate_tree <- function(n_levels = 6, edge_lengths = rep(1, 6)) {
   result <- list()
-  result[[1]] <- tibble(
-    m = 1, m_next = 2, k = 1, k_next = 1:2
-  )
-  
+  result[[1]] <- tibble(m = 1, m_next = 2, k = 1, k_next = 1:2)
+
   for (k in seq(n_levels - 1)) {
     conserved <- tibble(m = k + 1, m_next = k + 2, k = seq_len(k + 1))
     branched <- tibble(m = k + 1, m_next = k + 2, k = sample(k + 1, 1))
@@ -13,8 +11,10 @@ generate_tree <- function(n_levels = 6, edge_lengths = rep(1, 6)) {
       arrange(k) %>%
       mutate(k_next = row_number())
   }
-  
-  bind_rows(result)
+
+  bind_rows(result) %>%
+    mutate(weight = 1 / m_next) %>%
+    mutate(across(starts_with("m"), as.factor))
 }
 
 tree_topics <- function(tree, V=10, sigmas=NULL) {
@@ -23,13 +23,13 @@ tree_topics <- function(tree, V=10, sigmas=NULL) {
   if (is.null(sigmas)) {
     sigmas <- rep(1, n_distinct(tree$m))
   }
-  
+
   for (i in seq_len(nrow(tree))) {
     m_star <- tree$m[i]
     m_next <- as.character(tree$m_next[i])
-    
+
     if (!(m_next %in% names(mu))) {
-      K <- tree %>% 
+      K <- tree %>%
         filter(m == m_star) %>%
         slice_max(k_next) %>%
         pull(k_next)
@@ -37,11 +37,12 @@ tree_topics <- function(tree, V=10, sigmas=NULL) {
     }
     mu[[m_next]][tree$k_next[i], ] <- child_topic(mu[[m_star]][tree$k[i], ], sigmas[m_star])
   }
-  
+
   beta <- map(mu, ~ exp(.) / rowSums(exp(.)))
   map_dfr(beta, as_tibble, .id = "m") %>%
     group_by(m) %>%
     mutate(k = row_number()) %>%
+    rename_at(vars(starts_with("V")), ~ gsub("V", "", .)) %>%
     select(m, k, everything()) %>%
     ungroup()
 }
@@ -58,8 +59,7 @@ widen_betas <- function(betas) {
     select(-K, -k_LDA)
 }
 
-
-make_links <- function(edges, betas) {
+tree_links <- function(edges, betas) {
   result <- list()
   for (i in seq_len(nrow(edges))) {
     source <- betas %>%
@@ -72,11 +72,10 @@ make_links <- function(edges, betas) {
       rename_all(~ str_c("target_", .))
     result[[i]] <- bind_cols(source, target)
   }
-  
+
   edges %>%
     bind_cols(bind_rows(result))
 }
-
 
 #' Simulate with No Topics
 #'
@@ -126,7 +125,7 @@ k_topics <- function(K, V = 500, lambda = 1) {
   rdirichlet(K, rep(lambda, V)) %>%
     flatten_beta()
 }
-  
+
 
 normalize_mu <- function(mu) {
   beta <- matrix(0, nrow(mu), ncol(mu))
@@ -183,16 +182,35 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
 
 embed_edges <- function(edges, ...) {
   umap_recipe <- recipe(~ ., edges) %>%
-    update_role(replicate, m, m_next, k, k_next, method, new_role = "id") %>%
+    update_role(replicate, m, m_next, k, k_next, weight, method, estimate, new_role = "id") %>%
     step_umap(all_predictors(), ...)
 
   prep(umap_recipe)
 }
 
 endpoint_topics <- function(betas, alignment) {
-  beta_hats <- widen_betas(wrapper$fits$betas)
-  trees <- map(alignment[c("beta_alignment", "gamma_alignment")], ~ select(., m, m_next, k, k_next))
-  map_dfr(trees, ~ make_links(., beta_hats), .id = "method")
+  beta_hats <- widen_betas(betas)
+  alignment[c("beta_alignment", "gamma_alignment")] %>%
+    map(~ select(., m, m_next, k, k_next, weight)) %>%
+    map_dfr(~ tree_links(., beta_hats), .id = "method")
+}
+
+.simulate_replicate <- function(betas, gammas, M = 8, mechanism = NULL) {
+  if (is.null(mechanism)) {
+    mechanism <- simulate_lda
+  }
+  x <- mechanism(betas, gammas)
+  wrapper <- fit_wrapper(x, M)
+  endpoint_topics(wrapper$fits$betas, wrapper$alignment)
+}
+
+simulate_replicates <- function(betas, gammas, n_reps) {
+  map_dfr(seq_len(n_reps), ~ .simulate_replicate(betas, gammas), .id = "replicate")
+}
+
+fit_wrapper <- function(x, K_max) {
+  fits <- run_lda_models(x, 1:K_max, c(.1), "VEM", 123, reset = TRUE)
+  list(fits = fits, alignment = align_topics(fits))
 }
 
 vis_wrapper <- function(x, K_max) {

@@ -18,12 +18,14 @@ whether one alignment is ``better'' than another, but I'm not worried if we
 can't answer this definitively.
 
 ```{r}
+library("stringr")
 library("Barycenter")
 library("MCMCpack")
 library("dplyr")
 library("embed")
 library("ggplot2")
 library("purrr")
+library("magrittr")
 library("tidyr")
 library("topicmodels")
 source("R_LSY/align_topics_all_functions.R")
@@ -103,27 +105,23 @@ when they are drawn as points at a single location.
 
 ```{r}
 tree <- generate_tree()
-betas <- tree_topics(tree)
-true_links <- make_links(tree, betas)
-
-beta <- betas %>%
-  filter(m == max(m)) %>%
+betas <- tree_topics(tree, V = 500)
+links <- tree_links(tree, betas)
+leaves <- betas %>%
+  filter(m == max(as.numeric(m))) %>%
   select(-m, -k)
-gammas <- rdirichlet(100, rep(0.05, nrow(beta)))
-x <- simulate_lda(beta, gammas)
+gammas <- rdirichlet(1000, rep(0.1, nrow(leaves)))
+x <- simulate_lda(leaves, gammas)
 wrapper <- vis_wrapper(x, max(betas$m))
-wrapper
+wrapper[c("p1", "p2")]
 ```
-
 
 ```{r}
-beta_hats <- widen_betas(wrapper$fits$betas)
-edges <- endpoint_topics(beta_hats, wrapper$alignment) %>%
-  mutate(replicate = 1)
-#edges <- map_dfr(seq_len(5), ~ simulate_replicate(beta, gamma), .id = "replicate")
-edge_fits <- embed_edges(edges)
+edges <- map_dfr(c("beta_alignment", "gamma_alignment"), ~ mutate(links, method = ., estimate = FALSE)) %>%
+  bind_rows(simulate_replicates(leaves, gammas, 2) %>% mutate(estimate = TRUE))
+edge_fits <- embed_edges(edges, min_dist = 0.5, neighbors = 4)
 ```
- 
+
 \begin{enumerate}
 \item The figure below\footnote{or above, who knows with Latex} shows an example
 embedding with the topic tree from before. Each column is a different depth in
@@ -140,34 +138,20 @@ edges are being normalized in the gamma alignment (I should check).
 \end{enumerate}
  
 ```{r, fig.height = 5, fig.width = 10, fig.cap = "We can embed edges according to the topics that they link. Each point is an edge from one of 20 simulation replicates, each with new data generated from the same topic tree. Edges that have similar source and target topics are placed close to one another. The size of each point is the weight of that edge. Points have been slightly jittered."}
-edge_scores <- juice(edge_fits) %>%
-  mutate(endpoints = str_c(k, k_next, sep = "_"))
-
-ggplot(edge_scores, aes(umap_1, umap_2, col = method)) +
+ggplot(juice(edge_fits), aes(umap_1, umap_2)) +
   geom_point(
-    #aes(size = edge_weight), 
+    aes(size = weight, col = estimate), 
     alpha = 0.6
-    #position = position_jitter(w = .5, h = .5)
     ) +
-  facet_grid(method ~ k) +
+  facet_grid(method ~ m) +
   scale_color_brewer(palette = "Set2") +
   scale_size(range = c(0.1, 6)) +
   guides(color = guide_legend(override.aes = list(alpha = 1, size = 2))) +
   coord_fixed()
 ```
 
-```{r, fig.width = 4, fig.height = 6}
-ggplot(edge_scores %>% filter(replicate %in% 1:5), aes(umap_1, umap_2, col = method)) +
-  geom_point(
-    aes(size = edge_weight), 
-    alpha = 0.4
-    #position = position_jitter(w = .5, h = .5)
-    ) +
-  facet_grid(replicate ~ K) +
-  scale_color_brewer(palette = "Set2") +
-  scale_size(range = c(0.1, 6)) +
-  guides(color = guide_legend(override.aes = list(alpha = 1, size = 2))) +
-  coord_fixed()
+```{r}
+edges
 ```
 
 ```{r}
