@@ -18,14 +18,15 @@ whether one alignment is ``better'' than another, but I'm not worried if we
 can't answer this definitively.
 
 ```{r}
-library("stringr")
 library("Barycenter")
 library("MCMCpack")
 library("dplyr")
 library("embed")
 library("ggplot2")
-library("purrr")
+library("gridExtra")
 library("magrittr")
+library("purrr")
+library("stringr")
 library("tidyr")
 library("topicmodels")
 source("R_LSY/align_topics_all_functions.R")
@@ -104,8 +105,8 @@ when they are drawn as points at a single location.
 \end{enumerate}
 
 ```{r}
-tree <- generate_tree()
-betas <- tree_topics(tree, V = 500)
+tree <- generate_tree(n_levels = 4)
+betas <- tree_topics(tree, V = 50)
 links <- tree_links(tree, betas)
 leaves <- betas %>%
   filter(m == max(as.numeric(m))) %>%
@@ -118,8 +119,8 @@ wrapper[c("p1", "p2")]
 
 ```{r}
 edges <- map_dfr(c("beta_alignment", "gamma_alignment"), ~ mutate(links, method = ., estimate = FALSE)) %>%
-  bind_rows(simulate_replicates(leaves, gammas, 2) %>% mutate(estimate = TRUE))
-edge_fits <- embed_edges(edges, min_dist = 0.5, neighbors = 4)
+  bind_rows(simulate_replicates(leaves, gammas, 1) %>% mutate(estimate = TRUE))
+edge_fits <- embed_edges(edges)
 ```
 
 \begin{enumerate}
@@ -138,43 +139,113 @@ edges are being normalized in the gamma alignment (I should check).
 \end{enumerate}
  
 ```{r, fig.height = 5, fig.width = 10, fig.cap = "We can embed edges according to the topics that they link. Each point is an edge from one of 20 simulation replicates, each with new data generated from the same topic tree. Edges that have similar source and target topics are placed close to one another. The size of each point is the weight of that edge. Points have been slightly jittered."}
-ggplot(juice(edge_fits), aes(umap_1, umap_2)) +
-  geom_point(
-    aes(size = weight, col = estimate), 
-    alpha = 0.6
-    ) +
-  facet_grid(method ~ m) +
-  scale_color_brewer(palette = "Set2") +
+edge_scores <- juice(edge_fits) %>%
+  mutate(
+    method_label = ifelse(method == "beta_alignment", "Beta", "Gamma"),
+    estimate_label = ifelse(estimate, "Estimated Topic", "Topic")
+    )
+ggplot(edge_scores, aes(umap_1, umap_2, size = weight, col = estimate_label)) +
+  geom_point(data = edge_scores %>% filter(!estimate), alpha = 1) +
+  geom_point(data = edge_scores %>% filter(estimate), alpha = 0.4) +
+  facet_grid(method_label ~ m) +
+  scale_color_manual(values = c("#e97451", "#0c0c0c")) +
   scale_size(range = c(0.1, 6)) +
   guides(color = guide_legend(override.aes = list(alpha = 1, size = 2))) +
+  labs(
+    x = "UMAP Dimension 1",
+    y = "UMAP Dimension 2",
+    size = "Edge Weight"
+  ) +
   coord_fixed()
 ```
 
 ```{r}
-edges
-```
+n_reps <- 5
+N <- 100
+V <- 1000
+K <- 4
+lambda <- 0.1
+  
+j <- 1
+scores <- list()
+for (i in seq_len(n_reps)) {
+  print(i)
+  for (sim_method in c("dirichlet_multinomial", "topic_curve", "lda")) {
+    if (sim_method == "dirichlet_multinomial") {
+      x <- dirichlet_multinomial(N, V)
+    } else if (sim_method == "topic_curve") {
+      betas <- topic_curve(10, 3, V = V)
+      gammas <- rdirichlet(N, alpha = rep(lambda, 10))
+      x <- simulate_lda(betas, gammas)
+    } else if (sim_method == "lda") {
+      betas <- rdirichlet(K, rep(lambda, V))
+      gammas <- rdirichlet(N, alpha = rep(lambda, K))
+      x <- simulate_lda(betas, gammas)
+    }
+    
+    scores[[j]] <- fit_wrapper(x, 8)$alignment %>%
+      compute_score_along_branches() %>%
+      mutate(
+        simulation = sim_method,
+        replicate = i
+      )
+    j <- j + 1
+  }
+}
 
-```{r}
-betas <- k_topics(5, 10)
-betas <- topic_curve(10, 3, 10)
-x <- uniform_simplex(100, 10)
-```
-
-```{r}
-x_star <- uniform_simplex(50)
-vis_wrapper(x_star, 8)
-```
-
-```{r}
-betas <- k_topics(4)
-gamma <- rdirichlet(50, alpha = rep(0.1, 4))
-x <- simulate_leaves(betas, gamma)
-result <- vis_wrapper(x, 6)
-
-names(result)
+scores <- bind_rows(scores, .id = "j")
 ```
 
 ```{r, fig.width = 6, fig.height = 6}
+ggplot(scores, aes(m, score)) +
+  geom_point(size = 0.5) +
+  geom_line(
+    aes(group = interaction(replicate, branch)),
+    alpha = 0.8
+  ) +
+  facet_grid(replicate ~ simulation)
+ggsave("~/Desktop/simulation_stability_reps.png", dpi = 800)
+```
+
+```{r, fig.width = 10, fig.height = 10}
+for (i in seq_len(n_reps)) {
+  x_star <- dirichlet_multinomial(1000, 50)
+  p[[i]] <- vis_wrapper(x_star, 8)["p2"]
+}
+
+grid.arrange(grobs = p)
+#ggsave("dirichlet_multinomial.png", dpi = 800)
+```
+
+```{r, fig.width = 10, fig.height = 10}
+p <- list()
+for (i in seq_len(9)) {
+  betas <- topic_curve(10, 3, 10)
+  gammas <- rdirichlet(100, alpha = rep(0.1, 10))
+  x <- simulate_lda(betas, gammas)
+  p[[i]] <- vis_wrapper(x, 8)[["p2"]]
+}
+grid.arrange(grobs = p)
+ggsave("topic_curve.png", dpi = 800)
+```
+
+
+```{r, fig.height = 10, fig.width = 10}
+p <- list()
+for (i in seq_len(9)) {
+  betas <- rdirichlet(4, rep(0.1, 50))
+  gammas <- rdirichlet(100, alpha = rep(0.1, 4))
+  x <- simulate_lda(betas, gammas)
+  p[[i]] <- vis_wrapper(x, 8)[["p2"]]
+  
+}
+
+grid.arrange(grobs = p, ncol = 3)
+ggsave("true_lda.png", dpi = 800)
+result <- vis_wrapper(x, 8)
+```
+
+```{r, fig.width = 3, fig.height = 3}
 weight_comparison <- bind_rows(
   result$alignment$gamma_alignment %>%
     mutate(method = "gamma_alignment"),
@@ -187,7 +258,9 @@ weight_comparison <- bind_rows(
 ggplot(weight_comparison, aes(gamma_alignment, beta_alignment)) +
   geom_abline(slope = 1) +
   geom_point(aes(col = m)) +
+  labs(x = expression(paste(gamma, "-alignment")), y = expression(paste(beta, "-alignment")), col = "M") +
   coord_fixed()
+ggsave("alignment_comparison.png", dpi = 500)
 ```
 
 # Multimodal simulation

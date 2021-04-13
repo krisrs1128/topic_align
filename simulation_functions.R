@@ -1,6 +1,6 @@
 
 #' Tree with one split per level
-generate_tree <- function(n_levels = 6, edge_lengths = rep(1, 6)) {
+generate_tree <- function(n_levels = 6) {
   result <- list()
   result[[1]] <- tibble(m = 1, m_next = 2, k = 1, k_next = 1:2)
 
@@ -13,16 +13,29 @@ generate_tree <- function(n_levels = 6, edge_lengths = rep(1, 6)) {
   }
 
   bind_rows(result) %>%
-    mutate(weight = 1 / m_next) %>%
-    mutate(across(starts_with("m"), as.factor))
+    mutate(
+      weight = 1 / m_next,
+      across(starts_with("m"), as.factor)
+    )
 }
 
-tree_topics <- function(tree, V=10, sigmas=NULL) {
+split_point <- function(tree, mn, kn) {
+  split_k <- tree %>%
+    filter(m_next == mn) %>%
+    count(k) %>%
+    filter(n > 1) %>%
+    pull(k)
+
+  descendants <- tree %>%
+    filter(m_next == mn, k == split_k) %>%
+    pull(k_next)
+
+  kn %in% descendants
+}
+
+tree_topics <- function(tree, V=10, sigma_branch=1) {
   mu <- list()
-  mu[["1"]] <- matrix(0, 1, V) # simulate root
-  if (is.null(sigmas)) {
-    sigmas <- rep(1, n_distinct(tree$m))
-  }
+  mu[["1"]] <- matrix(rnorm(V), 1, V) # simulate root
 
   for (i in seq_len(nrow(tree))) {
     m_star <- tree$m[i]
@@ -35,7 +48,13 @@ tree_topics <- function(tree, V=10, sigmas=NULL) {
         pull(k_next)
       mu[[m_next]] <- matrix(0, K, V)
     }
-    mu[[m_next]][tree$k_next[i], ] <- child_topic(mu[[m_star]][tree$k[i], ], sigmas[m_star])
+
+    sigma_i <- split_point(tree, m_next, tree$k_next[i]) %>%
+      ifelse(sigma_branch, 0)
+    mu[[m_next]][tree$k_next[i], ] <- child_topic(
+      mu[[m_star]][tree$k[i], ],
+      sigma_i
+    )
   }
 
   beta <- map(mu, ~ exp(.) / rowSums(exp(.)))
@@ -80,7 +99,7 @@ tree_links <- function(edges, betas) {
 #' Simulate with No Topics
 #'
 #' n documents each with own topic uniform on V-dimensional simplex
-uniform_simplex <- function(n, V = 500, n0 = NULL, lambda = 1) {
+dirichlet_multinomial <- function(n, V = 500, n0 = NULL, lambda = 1) {
   if (is.null(n0)) {
     n0 <- rpois(n, 1000)
   }
@@ -109,7 +128,7 @@ topic_curve <- function(K, k_anchor, V = 500, lambda = 1) {
     topics[k, ] <- (1 - lambda) * anchor_topics[k_prev, ] + lambda * anchor_topics[k_prev + 1, ]
   }
   topics[K, ] <- anchor_topics[k_anchor, ]
-  flatten_beta(topics)
+  topics
 }
 
 flatten_beta <- function(beta) {
@@ -123,7 +142,8 @@ flatten_beta <- function(beta) {
 #' Simulate Standard K-Topics Model
 k_topics <- function(K, V = 500, lambda = 1) {
   rdirichlet(K, rep(lambda, V)) %>%
-    flatten_beta()
+    flatten_beta() %>%
+    widen_betas()
 }
 
 
@@ -195,7 +215,7 @@ endpoint_topics <- function(betas, alignment) {
     map_dfr(~ tree_links(., beta_hats), .id = "method")
 }
 
-.simulate_replicate <- function(betas, gammas, M = 8, mechanism = NULL) {
+.simulate_replicate <- function(betas, gammas, M = 5, mechanism = NULL) {
   if (is.null(mechanism)) {
     mechanism <- simulate_lda
   }
@@ -208,13 +228,13 @@ simulate_replicates <- function(betas, gammas, n_reps) {
   map_dfr(seq_len(n_reps), ~ .simulate_replicate(betas, gammas), .id = "replicate")
 }
 
-fit_wrapper <- function(x, K_max) {
-  fits <- run_lda_models(x, 1:K_max, c(.1), "VEM", 123, reset = TRUE)
+fit_wrapper <- function(x, M) {
+  fits <- run_lda_models(x, 1:M, c(.1), "VEM", 123, reset = TRUE)
   list(fits = fits, alignment = align_topics(fits))
 }
 
-vis_wrapper <- function(x, K_max) {
-  fits <- run_lda_models(x, 1:K_max, c(.1), "VEM", 123, reset = TRUE)
+vis_wrapper <- function(x, M) {
+  fits <- run_lda_models(x, 1:M, c(.1), "VEM", 123, reset = TRUE)
   alignment <- align_topics(fits)
   list(
     fits = fits,
