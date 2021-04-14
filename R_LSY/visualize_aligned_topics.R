@@ -62,11 +62,14 @@ visualize_aligned_topics =
         )
       layout_ribbons =
         bind_rows(
-          layout_ribbons %>% ungroup() %>% select(x, ymin, ymax, color, flow_id),
+          layout_ribbons %>% ungroup() %>% select(x, ymin, ymax, color, flow_id, score),
           leaves_layout$ribbons %>% select(x, ymin, ymax, color, flow_id)
         )
     }
-
+      if(method == "gamma_alignment") {
+      layout_scores = layout_ribbons %>% group_by(as.factor(flow_id)) %>%
+          summarize(x = mean(x), y = mean((ymin + ymax) / 2), score = mean(score), color = unique(color))
+      }
 
     M_nums = unique(layout_rect$x)  %>%  sort()
     M = unique(layout_rect$m)
@@ -90,7 +93,15 @@ visualize_aligned_topics =
       ) +
       scale_y_continuous(breaks = NULL, limits = c(-2,0)) +
       xlab("models") +
-      ylab("topic composition")
+        ylab("topic composition")
+
+      if(method == "gamma_alignment") {
+          g = g +
+              geom_text(
+                  data = layout_scores,
+                  aes(x = x, y = y, label = round(score, digits = 2))
+              )
+      }
 
     if(add_leaves & add_words_labels){
       longuest_word = leaves_layout$text$w %>% str_length() %>% max()
