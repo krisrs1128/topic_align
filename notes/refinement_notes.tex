@@ -116,4 +116,16 @@ See the image below.
 
 \includegraphics[width=.8\textwidth]{good-bad-split}
 
+
+How would we implement this?
+Suppose we are considering a particular cluster (a), and we want to know whether the split into children (b and c) at the next solution is a good split.
+We have a set of refinement matrices, $R^{12}$ containing cluster a, $R^{23}$ containing clusters b and c, and $R^{13}, R^{23},\ldots , R^{1m}, R^{2m}$ that tell us about subsequent clustering solutions.
+We use $R^{13}_{\cdot a}, \ldots, R^{1m}_{\cdot a}$ to identify all the clusters that are refinements of a.
+Then we use $R^{23}, \ldots, R^{2m}$ to see whether those clusters are also refinements of b or c.
+That is, for each cluster d that was a refinement of $a$ according to $R^{1j}$, we would look at $R^{2j}_{d b}$ and $R^{2j}_{d c}$ to see whether d was a refinement of either $b$ or $c$.
+
+This will give us a set of refinement scores, which we can summarize somehow (mean, min, fraction below a certain cutoff, etc) to decide whether the split from a to b and c is a good one or not.
+If it is good, we can perform the same procedure on b and c when they split.
+If it is not good, we can trim the tree after a, saying that while the subsequent clustering solutions have clusters that correspond to the same region as a, they are not actually distinct from each other and shouldn't be treated as such.
+
 \end{document}
