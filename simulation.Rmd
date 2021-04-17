@@ -9,297 +9,62 @@ output:
 knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
 ```
 
-\begin{enumerate}
-\item The purpose of simulation is to provide a controlled environment within
-which we can compare alternative analysis strategies. At the very least, we can
-define a distance between learned alignments and specify which choices lead to
-similar and different alignments. Ideally, we could also say something about
-whether one alignment is ``better'' than another, but I'm not worried if we
-can't answer this definitively.
-
 ```{r}
-library("Barycenter")
-library("MCMCpack")
+library("MASS")
 library("dplyr")
-library("embed")
-library("ggplot2")
-library("gridExtra")
-library("magrittr")
 library("purrr")
+library("ggplot2")
+library("MCMCpack")
 library("stringr")
 library("tidyr")
-library("topicmodels")
-source("R_LSY/align_topics_all_functions.R")
-source("simulation_functions.R")
-set.seed(123)
-mytheme <- theme_minimal() + 
+(theme_minimal() + 
   theme(
     panel.grid.minor = element_blank(),
     panel.background = element_rect(fill = "#f7f7f7"),
     panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
     legend.position = "bottom"
-  )
-theme_set(mytheme)
-```
-
-# Evaluation Proposal
-
-\begin{enumerate}
-\item There are two failure modes for topic alignment: we may fail to recover
-reliable topics, and even if we do, we may fail to properly align them across
-levels. It is difficult to give formal definitions for either of these. This is
-because if we simulate from a true topic model, then there can only be one
-"correct" $K$ -- we would be able to evaluate estimation accuracy for that $K$,
-but not the others. Since our algorithm is not positing a specific generative
-mechanism for how topic hierarchies arise, we cannot appeal to the usual
-strategy of (a) simulate from the generative model and (b) verify that
-parameters of the generative model can be recovered, given enough signal.
-\item The problem of trying to evaluate unsupervised methods without a clearly
-specified generative mechanism is not a new one. It arises in evaluation of
-clustering and dimensionality reduction algorithms, and a common approach there
-is to simulate data with some structure known in advance. Studying the resulting
-scores or clusters can be informative. For example, doing this for t-SNE and
-UMAP revealed that the density of points and distances between clusters are not
-captured by the reductions, and so should not be interpreted in real data
-analysis.
-\item Example simulation structure that we can evaluate topic alignment include,
-\begin{enumerate}
-\item Standard topic model at a fixed $K$. There is no real hierarchical
-structure in this data, and it would be interesting to see whether the resulting
-tree sheds any light on this.
-\item A fixed-length topic hierarchy. This is related to the topic tree
-structure from the previous section, but with more control of the resulting
-tree. Specifically, branching times are all fixed in advance (specified by the
-experimenter), and only depend on depth, not which particular descendant subtree
-you belong to. Second, to children topics for a given node, we first simulate a
-random direction associated with a node. One of the children moves in the
-direction for a fixed length, the other moves in the opposite direction for the
-same length.
-\item Topics lying along a high-dimensional curve. There is neither hierarchical
-nor topic structure here. We expect the algorithm to fit a few topics along the
-curve, adding more topics intermediate between these as $K$ increases.
-\item Completely uniform on simplex. There is no low-dimensional structure here.
-This is a relevant reference because we want to make sure we aren't fooled into
-reading topic structure in our figures when in fact there is none.
-\end{enumerate}
-\item Once we run these simulations, we can simply visualize the resulting tree.
-However, there is always the question of how things would turn out if we
-simulated it again -- illustration data are random, after all. If we just
-repeat the experiment many times, then we would have too many trees to be able
-to look at all of them at once.
-\item To resolve this, we propose embedding edges from all the simulation
-replicates. We represent each edge by the topic vectors that they link. We can
-reduce the dimensionality of these $2V$-dimensional vectors and visualize them.
-If, between simulation runs, there are edges that link similar pairs of topics,
-then they should appear close to one another in the embedding. We can visually
-encode the weight of these edges by the size of the points. In this way, we can
-study variation in both the learned topics and the weights between them.
-\item In principle, we could link these embeddings with edges corresponding to
-the topic that links them. It's like an inverted version of the tree, each edge
-becomes a node and each node becomes an edge.
-\item This makes me wonder why not just embed the topics directly and overlay
-edges with different weights. I haven't made this plot, but I would be concerned
-that there would be too many overlapping edges. I suspect it is harder to
-compare edge weights when they are drawn as links spread all over the plot than
-when they are drawn as points at a single location.
-\end{enumerate}
-
-```{r}
-tree <- generate_tree(n_levels = 4)
-betas <- tree_topics(tree, V = 50)
-links <- tree_links(tree, betas)
-leaves <- betas %>%
-  filter(m == max(as.numeric(m))) %>%
-  select(-m, -k)
-gammas <- rdirichlet(1000, rep(0.1, nrow(leaves)))
-x <- simulate_lda(leaves, gammas)
-wrapper <- vis_wrapper(x, max(betas$m))
-wrapper[c("p1", "p2")]
+  )) %>%
+  theme_set()
 ```
 
 ```{r}
-edges <- map_dfr(c("beta_alignment", "gamma_alignment"), ~ mutate(links, method = ., estimate = FALSE)) %>%
-  bind_rows(simulate_replicates(leaves, gammas, 1) %>% mutate(estimate = TRUE))
-edge_fits <- embed_edges(edges)
-```
+K <- 10
+V <- 500
+lambda_beta <- 1
+B <- rdirichlet(K, rep(lambda_beta, V))
 
-\begin{enumerate}
-\item The figure below\footnote{or above, who knows with Latex} shows an example
-embedding with the topic tree from before. Each column is a different depth in
-the tree, the two rows are alternative alignment strategies. Each circle is an
-edge embedding from one of 50 simulation replicates.
-\item The most obvious pattern is that a few, but not all, edges are
-consistently estimated across simulation replicates. This is visible in the
-difference in transparency between edges. The more transparent edges are linking
-topics that are only found in some of the simulation replicates.
-\item A second observation is that the edge weights for the topic beta alignment
-tree are more nearly sparse than those from the gamma alignment. The circles for
-many beta alignment edges are much smaller. This might be an artifact of how the
-edges are being normalized in the gamma alignment (I should check).
-\end{enumerate}
- 
-```{r, fig.height = 5, fig.width = 10, fig.cap = "We can embed edges according to the topics that they link. Each point is an edge from one of 20 simulation replicates, each with new data generated from the same topic tree. Edges that have similar source and target topics are placed close to one another. The size of each point is the weight of that edge. Points have been slightly jittered."}
-edge_scores <- juice(edge_fits) %>%
-  mutate(
-    method_label = ifelse(method == "beta_alignment", "Beta", "Gamma"),
-    estimate_label = ifelse(estimate, "Estimated Topic", "Topic")
-    )
-ggplot(edge_scores, aes(umap_1, umap_2, size = weight, col = estimate_label)) +
-  geom_point(data = edge_scores %>% filter(!estimate), alpha = 1) +
-  geom_point(data = edge_scores %>% filter(estimate), alpha = 0.4) +
-  facet_grid(method_label ~ m) +
-  scale_color_manual(values = c("#e97451", "#0c0c0c")) +
-  scale_size(range = c(0.1, 6)) +
-  guides(color = guide_legend(override.aes = list(alpha = 1, size = 2))) +
-  labs(
-    x = "UMAP Dimension 1",
-    y = "UMAP Dimension 2",
-    size = "Edge Weight"
-  ) +
-  coord_fixed()
-```
+perturb_topic <- function(beta_k, species_subsets, nu=2) {
+  beta_k[species_subsets[[1]]] <-  nu * beta_k[species_subsets[[1]]]
+  beta_k[species_subsets[[2]]] <-  (1 / nu) * beta_k[species_subsets[[2]]]
+  beta_k / sum(beta_k)
+}
 
-```{r}
-n_reps <- 5
-N <- 100
-V <- 1000
-K <- 4
-lambda <- 0.1
-  
-j <- 1
-scores <- list()
-for (i in seq_len(n_reps)) {
-  print(i)
-  for (sim_method in c("dirichlet_multinomial", "topic_curve", "lda")) {
-    if (sim_method == "dirichlet_multinomial") {
-      x <- dirichlet_multinomial(N, V)
-    } else if (sim_method == "topic_curve") {
-      betas <- topic_curve(10, 3, V = V)
-      gammas <- rdirichlet(N, alpha = rep(lambda, 10))
-      x <- simulate_lda(betas, gammas)
-    } else if (sim_method == "lda") {
-      betas <- rdirichlet(K, rep(lambda, V))
-      gammas <- rdirichlet(N, alpha = rep(lambda, K))
-      x <- simulate_lda(betas, gammas)
+perturb_topics <- function(B, n_per_topic = 20, subset_size = 15) {
+  K <- nrow(B)
+  B_tilde <- vector(length = K, mode = "list")
+  for (k in seq_len(K)) {
+    s <- sample(ncol(B), subset_size)
+    s <- list(s[1:(subset_size / 2)], s[-(1:(subset_size / 2))])
+    class_k <- matrix(nrow = n_per_topic, ncol = ncol(B))
+    nu <- 10 ^ runif(n_per_topic, -3, 0.2)
+    for (i in seq_len(n_per_topic)) {
+      class_k[i, ] <- perturb_topic(B[k, ], s, nu[i])
     }
-    
-    scores[[j]] <- fit_wrapper(x, 8)$alignment %>%
-      compute_score_along_branches() %>%
-      mutate(
-        simulation = sim_method,
-        replicate = i
-      )
-    j <- j + 1
+    B_tilde[[k]] <- as_tibble(class_k)
   }
-}
-
-scores <- bind_rows(scores, .id = "j")
-```
-
-```{r, fig.width = 6, fig.height = 6}
-ggplot(scores, aes(m, score)) +
-  geom_point(size = 0.5) +
-  geom_line(
-    aes(group = interaction(replicate, branch)),
-    alpha = 0.8
-  ) +
-  facet_grid(replicate ~ simulation)
-ggsave("~/Desktop/simulation_stability_reps.png", dpi = 800)
-```
-
-```{r, fig.width = 10, fig.height = 10}
-for (i in seq_len(n_reps)) {
-  x_star <- dirichlet_multinomial(1000, 50)
-  p[[i]] <- vis_wrapper(x_star, 8)["p2"]
-}
-
-grid.arrange(grobs = p)
-#ggsave("dirichlet_multinomial.png", dpi = 800)
-```
-
-```{r, fig.width = 10, fig.height = 10}
-p <- list()
-for (i in seq_len(9)) {
-  betas <- topic_curve(10, 3, 10)
-  gammas <- rdirichlet(100, alpha = rep(0.1, 10))
-  x <- simulate_lda(betas, gammas)
-  p[[i]] <- vis_wrapper(x, 8)[["p2"]]
-}
-grid.arrange(grobs = p)
-ggsave("topic_curve.png", dpi = 800)
-```
-
-
-```{r, fig.height = 10, fig.width = 10}
-p <- list()
-for (i in seq_len(9)) {
-  betas <- rdirichlet(4, rep(0.1, 50))
-  gammas <- rdirichlet(100, alpha = rep(0.1, 4))
-  x <- simulate_lda(betas, gammas)
-  p[[i]] <- vis_wrapper(x, 8)[["p2"]]
   
+  bind_rows(B_tilde, .id = "k") %>%
+    pivot_longer(-k, names_to = "w", values_to = "b") %>%
+    mutate(
+      w = as.integer(str_replace(w, "V", "")),
+      k = as.integer(k)
+    )
 }
 
-grid.arrange(grobs = p, ncol = 3)
-ggsave("true_lda.png", dpi = 800)
-result <- vis_wrapper(x, 8)
 ```
 
-```{r, fig.width = 3, fig.height = 3}
-weight_comparison <- bind_rows(
-  result$alignment$gamma_alignment %>%
-    mutate(method = "gamma_alignment"),
-  result$alignment$beta_alignment %>%
-    mutate(method = "beta_alignment")
-) %>%
-  select(m, k_LDA, k_LDA_next, method, norm_weight) %>%
-  pivot_wider(m:k_LDA_next, names_from = "method", values_from = "norm_weight")
-
-ggplot(weight_comparison, aes(gamma_alignment, beta_alignment)) +
-  geom_abline(slope = 1) +
-  geom_point(aes(col = m)) +
-  labs(x = expression(paste(gamma, "-alignment")), y = expression(paste(beta, "-alignment")), col = "M") +
-  coord_fixed()
-ggsave("alignment_comparison.png", dpi = 500)
+```{r, fig.width = 8, fig.height = 8}
+B_tilde <- perturb_topics(B)
+head(B_tilde)
 ```
 
-# Multimodal simulation
-
-\begin{enumerate}
-\item How can we evaluate alignment of topics learned across modalities?
-\item Strategy 1: We can simulate $\gamma$'s across modes so that some
-``columns'' are shared between modes while others are unique. The $\beta$'s can
-be completely independent, since we don't really care to compare them anyways.
-\item To elaborate, choose $K_{X}, K_{Y}$, and $K_{S}$ for the number of topics
-that are unique to $X$ and $Y$ and shared ($S$). For the first $K_{S}$, we can
-simulate mixed memberships $\gamma_{k}^{X} \equiv \gamma_{k}^{Y}$. For the
-remaining $K_{X}$ topics in $X$, we simulate $\gamma_{k}^{X}$ without regard to
-$Y$ (and vice versa).
-\item How can we tie together the $\gamma_{k}$'s for shared indices? A simple
-approach is to use a stick breaking construction. For $k \leq K_{S}$, we
-simulate,
-\begin{align*}
-\gamma_{k} &:= v_{k}\prod_{k^{\prime} < k} \left(1 - v_{k^{\prime}}\right) \\
-v_{k} &\sim \text{Beta}\left(1, \alpha\right),
-\end{align*}
-and we set $\gamma_{k}^{X} = \gamma_{k}^{Y} = \gamma_{k}$. For the remaining
-topics within the $X$ modality, we draw from
-\begin{align*}
-\gamma_{k} &:= v_{k}\prod_{k^{\prime} = 1}^{K_{S}}\left(1 - v_{k^{\prime}}\right)\prod_{k^{x} = K_{S} + 1}^{k - 1}\left(1 - v_{k^{x}}\right) \\
-v_{k^{x}} &\sim \text{Beta}\left(1, \alpha\right),
-\end{align*}
-and similarly for mode $Y$.
-\item The interpretation of the process above is that we take a stick and break
-off $K_{S}$ parts, whose lengths correspond to the $\gamma_{k}$'s for the shared
-topics. We then clone whatever is left of the stick, so there is one stick per
-each mode. Those remaining sticks are then broken independently via the same
-mechanism.
-\item A downside of Strategy 1 is that it doesn't evaluate our ability to search
-for ``soft'' matchings between topics across modes. The shared topics in one
-mode can be perfectly matched to the shared topics in the other.
-\end{enumerate}
-
-```{r}
-gammas <- multimodal_gammas(100, c(3, 3),c(3, 3), k_shared = 4, alpha_shared = 3)
-map(gammas, head)
-```
