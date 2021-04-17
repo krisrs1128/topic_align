@@ -11,12 +11,17 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 
 ```{r}
 library("MASS")
-library("dplyr")
-library("purrr")
-library("ggplot2")
 library("MCMCpack")
+library("dplyr")
+library("ggplot2")
+library("magrittr")
+library("purrr")
 library("stringr")
+library("superheat")
 library("tidyr")
+library("topicmodels")
+source("R_LSY/align_topics_all_functions.R")
+source("simulation_functions.R")
 (theme_minimal() + 
   theme(
     panel.grid.minor = element_blank(),
@@ -32,39 +37,18 @@ K <- 10
 V <- 500
 lambda_beta <- 1
 B <- rdirichlet(K, rep(lambda_beta, V))
-
-perturb_topic <- function(beta_k, species_subsets, nu=2) {
-  beta_k[species_subsets[[1]]] <-  nu * beta_k[species_subsets[[1]]]
-  beta_k[species_subsets[[2]]] <-  (1 / nu) * beta_k[species_subsets[[2]]]
-  beta_k / sum(beta_k)
-}
-
-perturb_topics <- function(B, n_per_topic = 20, subset_size = 15) {
-  K <- nrow(B)
-  B_tilde <- vector(length = K, mode = "list")
-  for (k in seq_len(K)) {
-    s <- sample(ncol(B), subset_size)
-    s <- list(s[1:(subset_size / 2)], s[-(1:(subset_size / 2))])
-    class_k <- matrix(nrow = n_per_topic, ncol = ncol(B))
-    nu <- 10 ^ runif(n_per_topic, -3, 0.2)
-    for (i in seq_len(n_per_topic)) {
-      class_k[i, ] <- perturb_topic(B[k, ], s, nu[i])
-    }
-    B_tilde[[k]] <- as_tibble(class_k)
-  }
-  
-  bind_rows(B_tilde, .id = "k") %>%
-    pivot_longer(-k, names_to = "w", values_to = "b") %>%
-    mutate(
-      w = as.integer(str_replace(w, "V", "")),
-      k = as.integer(k)
-    )
-}
-
 ```
 
 ```{r, fig.width = 8, fig.height = 8}
 B_tilde <- perturb_topics(B)
 head(B_tilde)
+```
+
+```{r, fig.height = 6, fig.width = 20}
+x <- equivalence_data(1000, 100, 6, list(beta = 1, gamma = 0.1))
+superheat(log(1 + x), pretty.order.rows = TRUE)
+```
+```{r}
+vis_wrapper(x, 12)
 ```
 
