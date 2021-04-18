@@ -83,7 +83,34 @@ equivalence_data <- function(N, V, K, lambdas, n0 = NULL, ...) {
   x
 }
 
+#' Multi-environment simulation functions
 
+hierarchical_dirichlet <- function(N_e, K, lambdas_pool = 1, lambda_e = NULL) {
+  if (is.null(lambda_e)) {
+    lambda_e <- rep(0.1, length(N_e))
+  }
+  
+  gammas <- list()
+  for (e in seq_along(N_e)) {
+    Gamma_e <- rdirichlet(1, rep(lambdas_pool, K))
+    gammas[[e]] <- rdirichlet(N_e[e], lambda_e[e] * Gamma_e)
+  }
+  
+  gammas
+}
+
+environment_shifts <- function(N_e, K, V, lambdas, ...) {
+  B <- rdirichlet(K, rep(lambdas$beta, V))
+  gammas <- hierarchical_dirichlet(N_e, K, lambdas$pool, lambdas$e)
+  x <- list()
+  for (e in seq_along(gammas)) {
+    x[[e]] <- simulate_lda(B, gammas, ...)
+  }
+  
+  bind_rows(x, .id = "environment")
+}
+
+#' General simulation functions
 .simulate_replicate <- function(betas, gammas, M = 5, mechanism = NULL) {
   if (is.null(mechanism)) {
     mechanism <- simulate_lda

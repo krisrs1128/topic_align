@@ -49,6 +49,10 @@ x <- equivalence_data(1000, 100, 6, list(beta = 1, gamma = 0.1))
 superheat(log(1 + x), pretty.order.rows = TRUE)
 ```
 ```{r}
-vis_wrapper(x, 12)
+alignment <- vis_wrapper(x, 12)
+```
+
+```{r, fig.height = 5, fig.width = 8}
+alignment$p2
 ```
 
