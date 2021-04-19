@@ -108,7 +108,7 @@ sim_data$gammas %>%
 ```
 
 ```{r}
-x_pool <- x %>%
+x_pool <- sim_data$x %>%
   select(-environment) %>%
   mutate(ix = row_number()) %>%
   column_to_rownames("ix")
@@ -121,20 +121,30 @@ fits <- sim_data$x %>%
   map(~ LDA(x = select(., -environment), k = K))
 ```
 The pooled fit.
-
 ```{r}
-library("tidytext")
-memberships <- tidy(pooled_fit, "gamma")
-hclust_result <- hclust(dist(pooled_fit@gamma))
-document_order <- pooled_fit@documents[hclust_result$order]
-memberships <- memberships %>%
-  mutate(document = factor(document, levels = document_order))
-memberships
+head(memberships)
+head(sim_data$x)
 ```
 
 ```{r}
-memberships$environment <- sim_data$x$environment
+library("tidytext")
+memberships <- tidy(pooled_fit, "gamma") %>%
+  left_join(
+    sim_data$x %>%
+      mutate(document = as.character(row_number())) %>%
+      select(document, environment)
+  )
+hclust_result <- hclust(dist(pooled_fit@gamma))
+document_order <- pooled_fit@documents[hclust_result$order]
+memberships <- memberships %>%
+  mutate(
+    document = factor(document, levels = document_order),
+    topic = as.factor(topic)
+  )
+memberships
+```
 
+```{r, fig.height = 10, fig.width = 6}
 ggplot(memberships, aes(gamma, document, fill = topic, col = topic)) +
   geom_col(position = position_stack()) +
   facet_grid(environment ~ ., scales = "free", space = "free") +
