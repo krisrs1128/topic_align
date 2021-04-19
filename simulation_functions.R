@@ -111,8 +111,8 @@ environment_shifts <- function(N_e, K, V, lambdas, ...) {
   }
   
   x <- bind_rows(x, .id = "environment")
-  rownames(x) <- 1:nrow(x)
-  x
+  gammas <- map_dfr(gammas, ~ as_tibble(.), .id = "environment")
+  list(x = x, B = B, gammas = gammas)
 }
 
 #' General simulation functions
