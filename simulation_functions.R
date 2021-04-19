@@ -50,11 +50,13 @@ perturb_topics <- function(B, n_per_topic = NULL, subset_size = 30, nus=c(1, 4))
     for (i in seq_len(n_per_topic[k])) {
       class_k[i, ] <- perturb_topic(B[k, ], s, nu[i])
     }
-    B_tilde[[k]] <- as_tibble(class_k)
+    B_tilde[[k]] <- as_tibble(class_k) %>%
+      mutate(i = row_number())
   }
   
   bind_rows(B_tilde, .id = "k") %>%
-    pivot_longer(-k, names_to = "w", values_to = "b")
+    pivot_longer(starts_with("V"), names_to = "w", values_to = "b") %>%
+    mutate(w = str_replace(w, "V", ""))
 }
 
 equivalence_data <- function(N, V, K, lambdas, n0 = NULL, ...) {
@@ -80,7 +82,7 @@ equivalence_data <- function(N, V, K, lambdas, n0 = NULL, ...) {
   
   colnames(x) <- seq_len(ncol(x))
   rownames(x) <- seq_len(nrow(x))
-  x
+  list(x = x, B = B, B_tilde = B_tilde, gammas = gammas)
 }
 
 #' Multi-environment simulation functions
@@ -104,10 +106,13 @@ environment_shifts <- function(N_e, K, V, lambdas, ...) {
   gammas <- hierarchical_dirichlet(N_e, K, lambdas$pool, lambdas$e)
   x <- list()
   for (e in seq_along(gammas)) {
-    x[[e]] <- simulate_lda(B, gammas, ...)
+    x[[e]] <- simulate_lda(B, gammas[[e]], ...) %>%
+      as_tibble()
   }
   
-  bind_rows(x, .id = "environment")
+  x <- bind_rows(x, .id = "environment")
+  rownames(x) <- 1:nrow(x)
+  x
 }
 
 #' General simulation functions
@@ -138,4 +143,22 @@ vis_wrapper <- function(x, M) {
     p1 = visualize_aligned_topics(alignment),
     p2 = visualize_aligned_topics(alignment, method = "beta_alignment")
   )
+}
+
+merge_betas <- function(betas, beta_hats, K_filter) {
+  beta_hats <- beta_hats %>%
+    filter(K == K_filter) %>%
+    pivot_wider(k_LDA, names_from = w, values_from = b) %>%
+    mutate(estimate = TRUE)
+
+  bind_rows(betas, beta_hats) %>%
+    select(k_LDA, estimate, everything())
+}
+
+betas_umap <- function(beta_compare) {
+  rec <- recipe(~ ., data = beta_compare) %>%
+    update_role(k_LDA, estimate, i, new_role = "id") %>%
+    step_umap(all_predictors(), neighbors = 5, min_dist = 1)
+  umap_res <- prep(rec)
+  list(umap = umap_res, scores = juice(umap_res))
 }

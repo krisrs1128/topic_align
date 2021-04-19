@@ -13,11 +13,13 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 library("MASS")
 library("MCMCpack")
 library("dplyr")
+library("embed")
 library("ggplot2")
 library("magrittr")
 library("purrr")
 library("stringr")
 library("superheat")
+library("tidymodels")
 library("tidyr")
 library("topicmodels")
 source("R_LSY/align_topics_all_functions.R")
@@ -33,26 +35,64 @@ source("simulation_functions.R")
 ```
 
 ```{r}
-K <- 10
-V <- 500
-lambda_beta <- 1
-B <- rdirichlet(K, rep(lambda_beta, V))
-```
-
-```{r, fig.width = 8, fig.height = 8}
-B_tilde <- perturb_topics(B)
-head(B_tilde)
+N <- 100
+K <- 4
+V <- 25
+sim_data <- equivalence_data(N, V, K, list(beta = 1, gamma = 0.1), subset_size = 4)
+alignment <- vis_wrapper(sim_data$x, 10)
 ```
 
 ```{r, fig.height = 6, fig.width = 20}
-x <- equivalence_data(1000, 100, 6, list(beta = 1, gamma = 0.1))
-superheat(log(1 + x), pretty.order.rows = TRUE)
-```
-```{r}
-alignment <- vis_wrapper(x, 12)
+superheat(log(1 + sim_data$x), pretty.order.rows = TRUE)
 ```
 
 ```{r, fig.height = 5, fig.width = 8}
 alignment$p2
 ```
 
+Compare the true with the estimated betas, before any perturbation.
+
+```{r, fig.height = 5, fig.width = 5}
+betas <- as_tibble(sim_data$B) %>%
+  mutate(
+    estimate = FALSE,
+    k_LDA = letters[row_number()],
+    i = 1
+  ) %>%
+  rename_all(~ str_replace(., "V", ""))
+
+umap_res <- merge_betas(betas, alignment$fits$betas, K) %>%
+  betas_umap()
+```
+
+```{r, fig.width = 3, fig.height = 3}
+ggplot(umap_res$scores, aes(umap_1, umap_2)) +
+  geom_point(aes(shape = estimate)) +
+  coord_fixed()
+```
+
+Now include the perturbed betas in the plot, and compare with estimates at a
+more refined $K$.
+
+```{r}
+betas <- bind_rows(sim_data$B_tilde) %>%
+  mutate(
+    estimate = FALSE,
+    k_LDA = letters[as.integer(k)]
+  ) %>%
+  pivot_wider(c("estimate", "i", "k_LDA", "k"), names_from = "w", values_from = "b")
+
+umap_res <- merge_betas(betas, alignment$fits$betas, K) %>%
+  betas_umap()
+```
+
+```{r, fig.width = 4, fig.height = 4}
+ggplot(scores, aes(umap_1, umap_2)) +
+  geom_point(aes(shape = estimate), alpha = 0.8) +
+  facet_wrap(~ estimate) +
+  coord_fixed()
+```
+
+```{r}
+x <- environment_shifts(c(100, 50, 150), 4, 200, list(pool = 1, e = rep(0.1, 3), beta = 1))
+```
