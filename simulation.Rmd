@@ -181,4 +181,27 @@ ggraph(G, "fr") +
 fits[[5]]@beta[4, ]
 fits[[3]]@beta[4, ]
 ```
+```{r}
+betas <- c(list(log(sim_data$B)), map(fits, ~ .@beta))
+masses <- c(
+  list(matrix(colSums(select(sim_data$gammas, -environment)), ncol = 1)),
+  map(fits, ~ matrix(colSums(.@gamma), ncol = 1))
+) %>%
+  map(~ . / sum(.))
 
+alignments <- align_pairs(betas, masses, reg = 2e-2)
+G <- graph_data(alignments, masses)
+```
+
+```{r, fig.height = 3, fig.width = 6}
+G <- G %>%
+  mutate(type = group == "1")
+
+ggraph(G, "bipartite") +
+  geom_edge_link(aes(width = weight, alpha = weight)) +
+  geom_node_label(aes(label = k, fill = group, size = mass)) +
+  scale_edge_width(range = c(0.001, 3)) +
+  scale_fill_brewer(palette = "Set2") +
+  guides(fill = guide_legend(override.aes = aes(label = ""))) +
+  scale_size(range = c(.1, 5), guide = FALSE)
+```
