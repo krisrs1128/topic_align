@@ -16,11 +16,13 @@ library("dplyr")
 library("embed")
 library("ggplot2")
 library("magrittr")
+library("pdist")
 library("purrr")
 library("stringr")
 library("superheat")
 library("tidymodels")
 library("tidyr")
+library("tidytext")
 library("topicmodels")
 source("R_LSY/align_topics_all_functions.R")
 source("simulation_functions.R")
@@ -95,9 +97,9 @@ ggplot(umap_res$scores, aes(umap_1, umap_2)) +
 
 ```{r, fig.width = 8, fig.height = 3}
 K <- 10
-N <- c(100, 50, 150)
+N <- rep(25, 6)
 V <- 200
-sim_data <- environment_shifts(N, K, K, list(pool = 2, e = rep(.5, 3), beta = 1))
+sim_data <- environment_shifts(N, K, K, list(pool = 0.2, e = rep(.5, length(N)), beta = 1))
 
 sim_data$gammas %>%
   pivot_longer(-environment, names_to = "k_LDA", values_to = "g") %>%
@@ -118,16 +120,12 @@ pooled_fit = LDA(x = x_pool, k = K)
 ```{r}
 fits <- sim_data$x %>%
   split(.$environment) %>%
-  map(~ LDA(x = select(., -environment), k = K))
-```
-The pooled fit.
-```{r}
-head(memberships)
-head(sim_data$x)
+  map(~ LDA(x = select(., -environment), k = 4))
 ```
 
+The pooled fit.
+
 ```{r}
-library("tidytext")
 memberships <- tidy(pooled_fit, "gamma") %>%
   left_join(
     sim_data$x %>%
@@ -141,7 +139,6 @@ memberships <- memberships %>%
     document = factor(document, levels = document_order),
     topic = as.factor(topic)
   )
-memberships
 ```
 
 ```{r, fig.height = 10, fig.width = 6}
@@ -153,10 +150,24 @@ ggplot(memberships, aes(gamma, document, fill = topic, col = topic)) +
   scale_fill_brewer(palette = "Set3") +
   labs(x = "Topic Membership", y = "Sample", fill = "Topic") +
   theme(
-    panel.spacing = unit(0.5, "lines"),
-    strip.switch.pad.grid = unit(0, "cm"),
     strip.text.y = element_text(size = 8, angle = 0),
     axis.text.y = element_blank(),
   )
+```
+
+Instead consider alignment across environments.
+
+```{r}
+betas <- map(fits, ~ .@beta)
+masses <- map(fits, ~ matrix(colSums(.@gamma), ncol = 1))
+environment_alignments <- map2(
+  seq_along(betas), 
+  seq_along(betas), 
+  ~ .beta_weights(betas[c(.x, .y)], masses[c(.x, .y)])
+)
+```
+
+```{r}
+length(environment_alignments)
 ```
 
