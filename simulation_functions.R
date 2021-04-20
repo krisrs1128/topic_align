@@ -162,3 +162,46 @@ betas_umap <- function(beta_compare) {
   umap_res <- prep(rec)
   list(umap = umap_res, scores = juice(umap_res))
 }
+
+align_pairs <- function(betas, masses, reg=1e-3) {
+  # keep track of all pairs
+  N <- length(betas)
+  pairs <- data.frame(
+    group1 = rep(seq_len(N), each = N),
+    group2 = rep(seq_len(N), N)
+  ) %>%
+    filter(group2 > group1) %>%
+    mutate(pair = row_number())
+  
+  # perform beta-alignment
+  alignments <- map2_dfr(
+    pairs$group1, pairs$group2,
+    ~ .beta_weights(betas[c(.x, .y)], masses[c(.x, .y)], reg),
+    .id = "pair"
+  ) %>%
+    mutate(pair = as.integer(pair)) %>%
+    left_join(pairs) %>%
+    unite(source, group1, k, remove = F) %>%
+    unite(target, group2, k_next, remove = F)
+}
+
+graph_data <- function(alignments, masses) {
+  masses_df <- masses %>%
+    map_dfr(~ tibble(mass = .) %>% mutate(k = as.factor(row_number())), .id = "group")
+  nodes <- bind_rows(
+    alignments %>% 
+      select(source, group1, k) %>% 
+      rename(name = source, group = group1),
+    alignments %>% 
+      select(target, group2, k_next) %>% 
+      rename(name = target, group = group2, k = k_next)
+  ) %>%
+    unique() %>%
+    mutate(group = as.factor(group), k = as.factor(k)) %>%
+    left_join(masses_df)
+  
+  tbl_graph(
+    edges = alignments %>% select(source, target, weight),
+    nodes = nodes
+  )
+}

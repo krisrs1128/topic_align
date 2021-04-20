@@ -15,11 +15,13 @@ library("MCMCpack")
 library("dplyr")
 library("embed")
 library("ggplot2")
+library("ggraph")
 library("magrittr")
 library("pdist")
 library("purrr")
 library("stringr")
 library("superheat")
+library("tidygraph")
 library("tidymodels")
 library("tidyr")
 library("tidytext")
@@ -160,14 +162,23 @@ Instead consider alignment across environments.
 ```{r}
 betas <- map(fits, ~ .@beta)
 masses <- map(fits, ~ matrix(colSums(.@gamma), ncol = 1))
-environment_alignments <- map2(
-  seq_along(betas), 
-  seq_along(betas), 
-  ~ .beta_weights(betas[c(.x, .y)], masses[c(.x, .y)])
-)
+alignments <- align_pairs(betas, masses, reg = 2e-2)
 ```
 
 ```{r}
-length(environment_alignments)
+G <- graph_data(alignments, masses)
+ggraph(G, "fr") +
+  geom_edge_link(aes(width = weight, alpha = weight)) +
+  geom_node_label(aes(label = k, fill = group, size = mass)) +
+  scale_edge_width(range = c(0.001, 3)) +
+  scale_fill_brewer(palette = "Set2") +
+  guides(fill = guide_legend(override.aes = aes(label = ""))) +
+  scale_size(range = c(.1, 5), guide = FALSE) +
+  coord_fixed()
+```
+
+```{r}
+fits[[5]]@beta[4, ]
+fits[[3]]@beta[4, ]
 ```
 
