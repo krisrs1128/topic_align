@@ -66,13 +66,23 @@ betas <- as_tibble(sim_data$B) %>%
   ) %>%
   rename_all(~ str_replace(., "V", ""))
 
-umap_res <- merge_betas(betas, alignment$fits$betas, K) %>%
+umap_res <- merge_betas(betas, alignment$fits$betas) %>%
   betas_umap(neighbors = 5)
+scores_truth <- umap_res$scores %>%
+  filter(!estimate)
+umap_expanded <- map(1:9, ~ mutate(scores_truth, K = .)) %>%
+  bind_rows(umap_res$scores %>% filter(estimate)) %>%
+  mutate(estimate_ = ifelse(estimate, "beta_hat", "beta"))
 ```
 
-```{r, fig.width = 3, fig.height = 3}
-ggplot(umap_res$scores, aes(umap_1, umap_2)) +
-  geom_point(aes(shape = estimate)) +
+```{r, fig.width = 3.5, fig.height = 7}
+cols <- c("#6adf4a", "#a2009e", "#36deb7", "#ff4a72", "#0154d1", "#e07f00", "#ab96ff", "#9f1c40", "#c48b99")
+ggplot(umap_expanded, aes(umap_1, umap_2)) +
+  geom_point(aes(shape = estimate_, col = k_LDA)) +
+  facet_grid(K ~ estimate_) +
+  scale_color_manual(values = cols) +
+  guides(col = guide_legend(ncol = 2), shape = guide_legend(ncol = 1)) +
+  labs(shape = "estimate", col = "k") +
   coord_fixed()
 ```
 
@@ -96,10 +106,6 @@ betas <- map_dfr(
   )
 ```
 ```{r}
-umap_res <- merge_betas(betas, alignment$fits$betas)
-umap_res
-```
-```{r}
 umap_res <- merge_betas(betas, alignment$fits$betas) %>%
   betas_umap(neighbors=10)
 scores_truth <- umap_res$scores %>%
@@ -110,7 +116,6 @@ umap_expanded <- map(1:9, ~ mutate(scores_truth, K = .)) %>%
 ```
 
 ```{r, fig.width = 3.5, fig.height = 7}
-cols <- c("#6adf4a", "#a2009e", "#36deb7", "#ff4a72", "#0154d1", "#e07f00", "#ab96ff", "#9f1c40", "#c48b99")
 ggplot(umap_expanded, aes(umap_1, umap_2)) +
   geom_point(aes(shape = estimate_, col = k_LDA)) +
   facet_grid(K ~ estimate_) +
