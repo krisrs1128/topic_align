@@ -40,15 +40,15 @@ set.seed(1234)
 ```
 
 ```{r}
-N <- 1000
+N <- 100
 K <- 6
-V <- 100
+V <- 500
 sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1))
-alignment <- vis_wrapper(sim_data$x, ceil(1.5 * K))
+alignment <- vis_wrapper(sim_data$x, ceiling(1.5 * K))
 ```
 
 ```{r, fig.height = 5, fig.width = 7}
-superheat(log(1 + sim_data$x), pretty.order.rows = TRUE)
+superheat(log(1 + sim_data$x), pretty.order.rows = TRUE, pretty.order.cols = TRUE)
 ```
 
 ```{r, fig.height = 3, fig.width = 6}
@@ -81,25 +81,42 @@ more refined $K$.
 
 ```{r}
 betas <- map_dfr(
-  sim_data$B_tilde, 
-  ~ as_tibble(.) %>% 
-    set_names(1:ncol(.)) %>%
-    mutate(
-      estimate = FALSE,
-      i = row_number()
-    ), 
-  .id = "k_LDA"
-) %>%
-  mutate(k_LDA = letters[as.numeric(k_LDA)])
-
-umap_res <- merge_betas(betas, alignment$fits$betas, K) %>%
+    sim_data$B_tilde, 
+    ~ as_tibble(.) %>% 
+      set_names(1:ncol(.)) %>%
+      mutate(
+        estimate = FALSE,
+        i = row_number()
+      ), 
+    .id = "K"
+  ) %>%
+  mutate(
+    K = as.integer(K),
+    k_LDA = letters[K]
+  )
+```
+```{r}
+umap_res <- merge_betas(betas, alignment$fits$betas)
+umap_res
+```
+```{r}
+umap_res <- merge_betas(betas, alignment$fits$betas) %>%
   betas_umap(neighbors=10)
+scores_truth <- umap_res$scores %>%
+  filter(!estimate)
+umap_expanded <- map(1:9, ~ mutate(scores_truth, K = .)) %>%
+  bind_rows(umap_res$scores %>% filter(estimate)) %>%
+  mutate(estimate_ = ifelse(estimate, "beta_hat", "beta"))
 ```
 
-```{r, fig.width = 4, fig.height = 4}
-ggplot(umap_res$scores, aes(umap_1, umap_2)) +
-  geom_point(aes(shape = estimate, col = k_LDA), alpha = 0.8) +
-  facet_wrap(~ estimate) +
+```{r, fig.width = 3.5, fig.height = 7}
+cols <- c("#6adf4a", "#a2009e", "#36deb7", "#ff4a72", "#0154d1", "#e07f00", "#ab96ff", "#9f1c40", "#c48b99")
+ggplot(umap_expanded, aes(umap_1, umap_2)) +
+  geom_point(aes(shape = estimate_, col = k_LDA)) +
+  facet_grid(K ~ estimate_) +
+  scale_color_manual(values = cols) +
+  guides(col = guide_legend(ncol = 2), shape = guide_legend(ncol = 1)) +
+  labs(shape = "estimate", col = "k") +
   coord_fixed()
 ```
 

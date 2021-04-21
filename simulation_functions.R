@@ -148,19 +148,18 @@ vis_wrapper <- function(x, M) {
   )
 }
 
-merge_betas <- function(betas, beta_hats, K_filter) {
+merge_betas <- function(betas, beta_hats) {
   beta_hats <- beta_hats %>%
-    filter(K == K_filter) %>%
-    pivot_wider(k_LDA, names_from = w, values_from = b) %>%
+    pivot_wider(k_LDA:K, names_from = w, values_from = b) %>%
     mutate(estimate = TRUE)
 
   bind_rows(betas, beta_hats) %>%
-    select(k_LDA, estimate, everything())
+    select(K, k_LDA, estimate, everything())
 }
 
 betas_umap <- function(beta_compare, ...) {
   rec <- recipe(~ ., data = beta_compare) %>%
-    update_role(k_LDA, estimate, i, new_role = "id") %>%
+    update_role(K, k_LDA, estimate, i, new_role = "id") %>%
     step_umap(all_predictors(), ...)
   umap_res <- prep(rec)
   list(umap = umap_res, scores = juice(umap_res))
