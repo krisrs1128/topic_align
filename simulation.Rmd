@@ -13,7 +13,6 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 library("MASS")
 library("MCMCpack")
 library("dplyr")
-library("embed")
 library("ggplot2")
 library("ggraph")
 library("magrittr")
@@ -22,7 +21,6 @@ library("purrr")
 library("stringr")
 library("superheat")
 library("tidygraph")
-library("tidymodels")
 library("tidyr")
 library("tidytext")
 library("topicmodels")
@@ -40,11 +38,14 @@ set.seed(1234)
 ```
 
 ```{r}
+#N <- 250
+#K <- 5
+#V <- 750
 N <- 100
-K <- 6
-V <- 500
+V <- 250
+K <- 5
 sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1))
-alignment <- vis_wrapper(sim_data$x, ceiling(1.5 * K))
+alignment <- vis_wrapper(sim_data$x, ceiling(2 * K))
 ```
 
 ```{r, fig.height = 5, fig.width = 7}
@@ -56,73 +57,45 @@ alignment$p2
 ```
 
 Compare the true with the estimated betas, before any perturbation.
+```{r, fig.width = 6, fig.height = 4}
+beta_hats <- alignment$fits$betas %>%
+  pivot_wider(k_LDA:K, names_from = w, values_from = b)
+beta_hats_mat <- beta_hats %>%
+  select(-k_LDA, -K)  %>%
+  as.matrix()
+similarity <- beta_hats_mat %*% t(sim_data$B) %>%
+  as_tibble() %>%
+  bind_cols(beta_hats %>% select(k_LDA, K)) %>%
+  pivot_longer(starts_with("V"), names_to = "beta", values_to = "sim")
 
-```{r, fig.height = 5, fig.width = 5}
-betas <- as_tibble(sim_data$B) %>%
-  mutate(
-    estimate = FALSE,
-    k_LDA = letters[row_number()],
-    i = 1
-  ) %>%
-  rename_all(~ str_replace(., "V", ""))
-
-umap_res <- merge_betas(betas, alignment$fits$betas) %>%
-  betas_umap(neighbors = 5)
-scores_truth <- umap_res$scores %>%
-  filter(!estimate)
-umap_expanded <- map(1:9, ~ mutate(scores_truth, K = .)) %>%
-  bind_rows(umap_res$scores %>% filter(estimate)) %>%
-  mutate(estimate_ = ifelse(estimate, "beta_hat", "beta"))
-```
-
-```{r, fig.width = 3.5, fig.height = 7}
-cols <- c("#6adf4a", "#a2009e", "#36deb7", "#ff4a72", "#0154d1", "#e07f00", "#ab96ff", "#9f1c40", "#c48b99")
-ggplot(umap_expanded, aes(umap_1, umap_2)) +
-  geom_point(aes(shape = estimate_, col = k_LDA)) +
-  facet_grid(K ~ estimate_) +
-  scale_color_manual(values = cols) +
-  guides(col = guide_legend(ncol = 2), shape = guide_legend(ncol = 1)) +
-  labs(shape = "estimate", col = "k") +
-  coord_fixed()
+ggplot(similarity, aes(beta, k_LDA)) +
+  geom_tile(aes(fill = sim)) +
+  scale_fill_distiller(direction = 1) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  facet_wrap(~ K, scale = "free", ncol = 5)
 ```
 
 Now include the perturbed betas in the plot, and compare with estimates at a
 more refined $K$.
 
-```{r}
-betas <- map_dfr(
-    sim_data$B_tilde, 
-    ~ as_tibble(.) %>% 
-      set_names(1:ncol(.)) %>%
-      mutate(
-        estimate = FALSE,
-        i = row_number()
-      ), 
-    .id = "K"
-  ) %>%
+```{r, fig.width = 6, fig.height = 4}
+similarity <- beta_hats_mat %*% t(do.call(rbind, sim_data$B_tilde)) %>%
+  as_tibble() %>%
+  bind_cols(beta_hats %>% select(k_LDA, K)) %>%
+  pivot_longer(starts_with("V"), names_to = "beta", values_to = "sim") %>%
   mutate(
-    K = as.integer(K),
-    k_LDA = letters[K]
+    beta = str_replace(beta, "V", ""),
+    beta = str_pad(beta, 2)
   )
-```
-```{r}
-umap_res <- merge_betas(betas, alignment$fits$betas) %>%
-  betas_umap(neighbors=10)
-scores_truth <- umap_res$scores %>%
-  filter(!estimate)
-umap_expanded <- map(1:9, ~ mutate(scores_truth, K = .)) %>%
-  bind_rows(umap_res$scores %>% filter(estimate)) %>%
-  mutate(estimate_ = ifelse(estimate, "beta_hat", "beta"))
-```
 
-```{r, fig.width = 3.5, fig.height = 7}
-ggplot(umap_expanded, aes(umap_1, umap_2)) +
-  geom_point(aes(shape = estimate_, col = k_LDA)) +
-  facet_grid(K ~ estimate_) +
-  scale_color_manual(values = cols) +
-  guides(col = guide_legend(ncol = 2), shape = guide_legend(ncol = 1)) +
-  labs(shape = "estimate", col = "k") +
-  coord_fixed()
+ggplot(similarity, aes(beta, k_LDA)) +
+  geom_tile(aes(fill = sim)) +
+  scale_fill_distiller(direction = 1) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  facet_wrap(~ K, scale = "free", ncol = 5) +
+  theme(axis.text.x = element_text(size = 5, angle = 90))
 ```
 
 ```{r, fig.width = 6, fig.height = 3}

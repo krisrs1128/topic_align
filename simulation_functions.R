@@ -28,10 +28,10 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
 }
 
 #' Simulation functions for functional equivalence experiment
-perturb_topics <- function(B, n_per_topic = NULL, subset_size = 10, nu_max = 0.3, ...) {
+perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40, nu_max = 10, ...) {
   K <- nrow(B)
   if (is.null(n_per_topic)) {
-    n_per_topic <- c(rep(20, 2), rep(1, K - 2))
+    n_per_topic <- c(rep(5, 2), rep(1, K - 2))
   }
 
   B_tilde <- list()
@@ -39,11 +39,11 @@ perturb_topics <- function(B, n_per_topic = NULL, subset_size = 10, nu_max = 0.3
     B_tilde[[k]] <- rep(1, n_per_topic[k]) %*% matrix(B[k, ], nrow = 1)
     if (n_per_topic[k] == 1) next
 
-    nu <- runif(n_per_topic[k], 0, nu_max)
+    nu <- runif(n_per_topic[k], 1, nu_max)
     for (i in seq_len(n_per_topic[k])) {
       ix <- c(1:(subset_size / 2), (subset_size / 2 + 1):subset_size)
-      B_tilde[[k]][i, ix[1]] <- (1 + nu[i]) * B_tilde[[k]][i, ix[1]]
-      B_tilde[[k]][i, ix[2]] <- (1 - nu[i]) * B_tilde[[k]][i, ix[2]]
+      B_tilde[[k]][i, ix[1]] <- nu[i] * B_tilde[[k]][i, ix[1]]
+      B_tilde[[k]][i, ix[2]] <- (1 / nu[i]) * B_tilde[[k]][i, ix[2]]
       B_tilde[[k]][i, ] <- B_tilde[[k]][i, ] / sum(B_tilde[[k]][i, ])
     }
   }
@@ -146,23 +146,6 @@ vis_wrapper <- function(x, M) {
     p1 = visualize_aligned_topics(alignment),
     p2 = visualize_aligned_topics(alignment, method = "beta_alignment")
   )
-}
-
-merge_betas <- function(betas, beta_hats) {
-  beta_hats <- beta_hats %>%
-    pivot_wider(k_LDA:K, names_from = w, values_from = b) %>%
-    mutate(estimate = TRUE)
-
-  bind_rows(betas, beta_hats) %>%
-    select(K, k_LDA, estimate, everything())
-}
-
-betas_umap <- function(beta_compare, ...) {
-  rec <- recipe(~ ., data = beta_compare) %>%
-    update_role(K, k_LDA, estimate, i, new_role = "id") %>%
-    step_umap(all_predictors(), ...)
-  umap_res <- prep(rec)
-  list(umap = umap_res, scores = juice(umap_res))
 }
 
 align_pairs <- function(betas, masses, reg=1e-3) {
