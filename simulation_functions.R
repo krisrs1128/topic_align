@@ -33,12 +33,12 @@ perturb_topics <- function(B, n_per_topic = NULL, subset_size = 10, nu_max = 0.3
   if (is.null(n_per_topic)) {
     n_per_topic <- c(rep(20, 2), rep(1, K - 2))
   }
-  
+
   B_tilde <- list()
   for (k in seq_len(K)) {
     B_tilde[[k]] <- rep(1, n_per_topic[k]) %*% matrix(B[k, ], nrow = 1)
     if (n_per_topic[k] == 1) next
-    
+
     nu <- runif(n_per_topic[k], 0, nu_max)
     for (i in seq_len(n_per_topic[k])) {
       ix <- c(1:(subset_size / 2), (subset_size / 2 + 1):subset_size)
@@ -47,7 +47,7 @@ perturb_topics <- function(B, n_per_topic = NULL, subset_size = 10, nu_max = 0.3
       B_tilde[[k]][i, ] <- B_tilde[[k]][i, ] / sum(B_tilde[[k]][i, ])
     }
   }
-  
+
   B_tilde
 }
 
@@ -73,17 +73,17 @@ equivalence_data <- function(N, V, K, lambdas, n0 = NULL, ...) {
   if (is.null(n0)) {
     n0 <- rpois(N, 1000)
   }
-  
+
   B <- rdirichlet(K, rep(lambdas$beta, V))
   B_tilde <- perturb_topics(B, ...)
   gammas <- rdirichlet(N, rep(lambdas$gamma, K))
   x <- matrix(nrow = N, ncol = V)
-  
+
   for (i in seq_len(N)) {
     B_i <- sample_topics(B_tilde)
     x[i, ] <- simulate_document(B_i, gammas[i, ], n0[i])
   }
-  
+
   colnames(x) <- seq_len(ncol(x))
   rownames(x) <- seq_len(nrow(x))
   list(x = x, B = B, B_tilde = B_tilde, gammas = gammas)
@@ -94,13 +94,13 @@ hierarchical_dirichlet <- function(N_e, K, lambdas_pool = 1, lambda_e = NULL) {
   if (is.null(lambda_e)) {
     lambda_e <- rep(0.1, length(N_e))
   }
-  
+
   gammas <- list()
   for (e in seq_along(N_e)) {
     Gamma_e <- rdirichlet(1, rep(lambdas_pool, K))
     gammas[[e]] <- rdirichlet(N_e[e], lambda_e[e] * Gamma_e)
   }
-  
+
   gammas
 }
 
@@ -112,7 +112,7 @@ environment_shifts <- function(N_e, K, V, lambdas, ...) {
     x[[e]] <- simulate_lda(B, gammas[[e]], ...) %>%
       as_tibble()
   }
-  
+
   x <- bind_rows(x, .id = "environment")
   gammas <- map_dfr(gammas, ~ as_tibble(.), .id = "environment")
   list(x = x, B = B, gammas = gammas)
@@ -175,7 +175,7 @@ align_pairs <- function(betas, masses, reg=1e-3) {
   ) %>%
     filter(group2 > group1) %>%
     mutate(pair = row_number())
-  
+
   # perform beta-alignment
   alignments <- map2_dfr(
     pairs$group1, pairs$group2,
@@ -192,17 +192,17 @@ graph_data <- function(alignments, masses) {
   masses_df <- masses %>%
     map_dfr(~ tibble(mass = .) %>% mutate(k = as.factor(row_number())), .id = "group")
   nodes <- bind_rows(
-    alignments %>% 
-      select(source, group1, k) %>% 
+    alignments %>%
+      select(source, group1, k) %>%
       rename(name = source, group = group1),
-    alignments %>% 
-      select(target, group2, k_next) %>% 
+    alignments %>%
+      select(target, group2, k_next) %>%
       rename(name = target, group = group2, k = k_next)
   ) %>%
     unique() %>%
     mutate(group = as.factor(group), k = as.factor(k)) %>%
     left_join(masses_df)
-  
+
   tbl_graph(
     edges = alignments %>% select(source, target, weight),
     nodes = nodes
