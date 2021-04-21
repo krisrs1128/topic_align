@@ -28,35 +28,45 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
 }
 
 #' Simulation functions for functional equivalence experiment
-
-perturb_topic <- function(beta_k, species_subsets, nu=2) {
-  beta_k[species_subsets[[1]]] <-  nu * beta_k[species_subsets[[1]]]
-  beta_k[species_subsets[[2]]] <-  (1 / nu) * beta_k[species_subsets[[2]]]
-  beta_k / sum(beta_k)
-}
-
-perturb_topics <- function(B, n_per_topic = NULL, subset_size = 30, nus=c(1, 4)) {
+perturb_topics <- function(B, n_per_topic = NULL, subset_size = 10, nu_max = 0.3, ...) {
   K <- nrow(B)
-  stopifnot(subset_size < ncol(B))
   if (is.null(n_per_topic)) {
     n_per_topic <- c(rep(20, 2), rep(1, K - 2))
   }
   
-  B_tilde <- vector(length = K, mode = "list")
+  B_tilde <- list()
   for (k in seq_len(K)) {
-    s <- list(1:(subset_size / 2), (subset_size / 2 + 1):subset_size)
-    class_k <- matrix(nrow = n_per_topic[k], ncol = ncol(B))
-    nu <- runif(n_per_topic[k], nus[1], nus[2])
+    B_tilde[[k]] <- rep(1, n_per_topic[k]) %*% matrix(B[k, ], nrow = 1)
+    if (n_per_topic[k] == 1) next
+    
+    nu <- runif(n_per_topic[k], 0, nu_max)
     for (i in seq_len(n_per_topic[k])) {
-      class_k[i, ] <- perturb_topic(B[k, ], s, nu[i])
+      ix <- c(1:(subset_size / 2), (subset_size / 2 + 1):subset_size)
+      B_tilde[[k]][i, ix[1]] <- (1 + nu[i]) * B_tilde[[k]][i, ix[1]]
+      B_tilde[[k]][i, ix[2]] <- (1 - nu[i]) * B_tilde[[k]][i, ix[2]]
+      B_tilde[[k]][i, ] <- B_tilde[[k]][i, ] / sum(B_tilde[[k]][i, ])
     }
-    B_tilde[[k]] <- as_tibble(class_k) %>%
-      mutate(i = row_number())
   }
   
-  bind_rows(B_tilde, .id = "k") %>%
-    pivot_longer(starts_with("V"), names_to = "w", values_to = "b") %>%
-    mutate(w = str_replace(w, "V", ""))
+  B_tilde
+}
+
+sample_topics <- function(B_tilde) {
+  B <- matrix(nrow = length(B_tilde), ncol = ncol(B_tilde[[1]]))
+  for (k in seq_along(B_tilde)) {
+    ix <- sample(seq_len(nrow(B_tilde[[k]])), 1)
+    B[k, ] <- B_tilde[[k]][ix, ]
+  }
+  B
+}
+
+simulate_document <- function(B, gamma_i, n0) {
+  z <- rmultinom(1, n0, gamma_i)
+  x <- vector(length = ncol(B))
+  for (k in seq_along(z)) {
+    x <- x + rmultinom(1, z[k], B[k, ])
+  }
+  x
 }
 
 equivalence_data <- function(N, V, K, lambdas, n0 = NULL, ...) {
@@ -70,14 +80,8 @@ equivalence_data <- function(N, V, K, lambdas, n0 = NULL, ...) {
   x <- matrix(nrow = N, ncol = V)
   
   for (i in seq_len(N)) {
-    B_i <- B_tilde %>%
-      group_by(k, w) %>%
-      sample_n(1) %>%
-      pivot_wider(k, names_from = "w", values_from = "b") %>%
-      ungroup() %>%
-      select(-k) %>%
-      as.matrix()
-    x[i, ] <- rmultinom(1, n0[i], t(B_i) %*% gammas[i, ])
+    B_i <- sample_topics(B_tilde)
+    x[i, ] <- simulate_document(B_i, gammas[i, ], n0[i])
   }
   
   colnames(x) <- seq_len(ncol(x))
@@ -86,7 +90,6 @@ equivalence_data <- function(N, V, K, lambdas, n0 = NULL, ...) {
 }
 
 #' Multi-environment simulation functions
-
 hierarchical_dirichlet <- function(N_e, K, lambdas_pool = 1, lambda_e = NULL) {
   if (is.null(lambda_e)) {
     lambda_e <- rep(0.1, length(N_e))
@@ -155,10 +158,10 @@ merge_betas <- function(betas, beta_hats, K_filter) {
     select(k_LDA, estimate, everything())
 }
 
-betas_umap <- function(beta_compare) {
+betas_umap <- function(beta_compare, ...) {
   rec <- recipe(~ ., data = beta_compare) %>%
     update_role(k_LDA, estimate, i, new_role = "id") %>%
-    step_umap(all_predictors(), neighbors = 5, min_dist = 1)
+    step_umap(all_predictors(), ...)
   umap_res <- prep(rec)
   list(umap = umap_res, scores = juice(umap_res))
 }

@@ -28,6 +28,7 @@ library("tidytext")
 library("topicmodels")
 source("R_LSY/align_topics_all_functions.R")
 source("simulation_functions.R")
+set.seed(1234)
 (theme_minimal() + 
   theme(
     panel.grid.minor = element_blank(),
@@ -39,18 +40,18 @@ source("simulation_functions.R")
 ```
 
 ```{r}
-N <- 100
-K <- 4
-V <- 25
-sim_data <- equivalence_data(N, V, K, list(beta = 1, gamma = 0.1), subset_size = 4)
-alignment <- vis_wrapper(sim_data$x, 10)
+N <- 1000
+K <- 6
+V <- 100
+sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1))
+alignment <- vis_wrapper(sim_data$x, ceil(1.5 * K))
 ```
 
-```{r, fig.height = 6, fig.width = 20}
+```{r, fig.height = 5, fig.width = 7}
 superheat(log(1 + sim_data$x), pretty.order.rows = TRUE)
 ```
 
-```{r, fig.height = 5, fig.width = 8}
+```{r, fig.height = 3, fig.width = 6}
 alignment$p2
 ```
 
@@ -66,7 +67,7 @@ betas <- as_tibble(sim_data$B) %>%
   rename_all(~ str_replace(., "V", ""))
 
 umap_res <- merge_betas(betas, alignment$fits$betas, K) %>%
-  betas_umap()
+  betas_umap(neighbors = 5)
 ```
 
 ```{r, fig.width = 3, fig.height = 3}
@@ -79,25 +80,30 @@ Now include the perturbed betas in the plot, and compare with estimates at a
 more refined $K$.
 
 ```{r}
-betas <- bind_rows(sim_data$B_tilde) %>%
-  mutate(
-    estimate = FALSE,
-    k_LDA = letters[as.integer(k)]
-  ) %>%
-  pivot_wider(c("estimate", "i", "k_LDA", "k"), names_from = "w", values_from = "b")
+betas <- map_dfr(
+  sim_data$B_tilde, 
+  ~ as_tibble(.) %>% 
+    set_names(1:ncol(.)) %>%
+    mutate(
+      estimate = FALSE,
+      i = row_number()
+    ), 
+  .id = "k_LDA"
+) %>%
+  mutate(k_LDA = letters[as.numeric(k_LDA)])
 
 umap_res <- merge_betas(betas, alignment$fits$betas, K) %>%
-  betas_umap()
+  betas_umap(neighbors=10)
 ```
 
 ```{r, fig.width = 4, fig.height = 4}
 ggplot(umap_res$scores, aes(umap_1, umap_2)) +
-  geom_point(aes(shape = estimate), alpha = 0.8) +
+  geom_point(aes(shape = estimate, col = k_LDA), alpha = 0.8) +
   facet_wrap(~ estimate) +
   coord_fixed()
 ```
 
-```{r, fig.width = 8, fig.height = 3}
+```{r, fig.width = 6, fig.height = 3}
 K <- 10
 N <- rep(25, 6)
 V <- 200
@@ -143,7 +149,7 @@ memberships <- memberships %>%
   )
 ```
 
-```{r, fig.height = 10, fig.width = 6}
+```{r, fig.height = 8, fig.width = 5}
 ggplot(memberships, aes(gamma, document, fill = topic, col = topic)) +
   geom_col(position = position_stack()) +
   facet_grid(environment ~ ., scales = "free", space = "free") +
@@ -165,16 +171,15 @@ masses <- map(fits, ~ matrix(colSums(.@gamma), ncol = 1))
 alignments <- align_pairs(betas, masses, reg = 2e-2)
 ```
 
-```{r}
+```{r, fig.height = 4, fig.width = 6}
 G <- graph_data(alignments, masses)
 ggraph(G, "fr") +
   geom_edge_link(aes(width = weight, alpha = weight)) +
   geom_node_label(aes(label = k, fill = group, size = mass)) +
-  scale_edge_width(range = c(0.001, 3)) +
+  scale_edge_width(range = c(0, 3)) +
   scale_fill_brewer(palette = "Set2") +
   guides(fill = guide_legend(override.aes = aes(label = ""))) +
-  scale_size(range = c(.1, 5), guide = FALSE) +
-  coord_fixed()
+  scale_size(range = c(.1, 5), guide = FALSE)
 ```
 
 ```{r}
@@ -182,10 +187,10 @@ fits[[5]]@beta[4, ]
 fits[[3]]@beta[4, ]
 ```
 ```{r}
-betas <- c(list(log(sim_data$B)), map(fits, ~ .@beta))
+betas <- c(map(fits, ~ .@beta), list(log(sim_data$B)))
 masses <- c(
-  list(matrix(colSums(select(sim_data$gammas, -environment)), ncol = 1)),
-  map(fits, ~ matrix(colSums(.@gamma), ncol = 1))
+  map(fits, ~ matrix(colSums(.@gamma), ncol = 1)),
+  list(matrix(colSums(select(sim_data$gammas, -environment)), ncol = 1))
 ) %>%
   map(~ . / sum(.))
 
@@ -195,12 +200,12 @@ G <- graph_data(alignments, masses)
 
 ```{r, fig.height = 3, fig.width = 6}
 G <- G %>%
-  mutate(type = group == "1")
+  mutate(type = group == "7")
 
 ggraph(G, "bipartite") +
   geom_edge_link(aes(width = weight, alpha = weight)) +
   geom_node_label(aes(label = k, fill = group, size = mass)) +
-  scale_edge_width(range = c(0.001, 3)) +
+  scale_edge_width(range = c(0, 3)) +
   scale_fill_brewer(palette = "Set2") +
   guides(fill = guide_legend(override.aes = aes(label = ""))) +
   scale_size(range = c(.1, 5), guide = FALSE)
