@@ -27,11 +27,41 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
   x
 }
 
+simulate_gradient <- function(N, K, V, lambdas, alpha=1, n0=NULL) {
+  B <- rdirichlet(K, rep(lambdas$beta, V))
+  gammas <- rdirichlet(N, rep(lambdas$gamma, K))
+  n <- nrow(gammas)
+  if (is.null(n0)) {
+    n0 <- rpois(n, 1000)
+  }
+
+  x <- matrix(nrow = n, ncol = ncol(B))
+  for (i in seq_len(n)) {
+    nu_i <- matrix(rdirichlet(1, rep(lambdas$nu, ncol(B))), ncol = 1)
+    mu <- alpha * t(B) %*% gammas[i, ] + (1 - alpha) * nu_i
+    x[i, ] <- rmultinom(1, n0[i], mu)
+  }
+
+  rownames(x) <- seq_len(n)
+  colnames(x) <- seq_len(ncol(B))
+  list(B = B, gammas = gammas, x = x)
+}
+
+cosine_similarity <- function(X, Y) {
+  sim <- matrix(nrow = nrow(X), ncol = nrow(Y))
+  for (i in seq_len(nrow(X))) {
+    for (j in seq_len(nrow(Y))) {
+      sim[i, j] <- sum(X[i, ] * Y[j, ]) / sqrt(sum(X[i, ] ^ 2) * sum(Y[j, ] ^ 2))
+    }
+  }
+  sim
+}
+
 #' Simulation functions for functional equivalence experiment
 perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40) {
   K <- nrow(B)
   if (is.null(n_per_topic)) {
-    n_per_topic <- c(rep(2, 1), rep(1, K - 1))
+    n_per_topic <- c(rep(2, 2), rep(1, K - 2))
   }
 
   B_tilde <- list()
@@ -174,7 +204,10 @@ align_pairs <- function(betas, masses, reg=1e-3) {
     mutate(pair = as.integer(pair)) %>%
     left_join(pairs) %>%
     unite(source, group1, k, remove = F) %>%
-    unite(target, group2, k_next, remove = F)
+    unite(target, group2, k_next, remove = F) %>%
+    group_by(source) %>%
+    mutate(norm_weight = weight / sum(weight, na.rm = TRUE)) %>%
+    ungroup() 
 }
 
 graph_data <- function(alignments, masses) {
@@ -193,7 +226,7 @@ graph_data <- function(alignments, masses) {
     left_join(masses_df)
 
   tbl_graph(
-    edges = alignments %>% select(source, target, weight),
+    edges = alignments %>% select(source, target, norm_weight),
     nodes = nodes
   )
 }
