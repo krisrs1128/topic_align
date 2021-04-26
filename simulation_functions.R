@@ -28,10 +28,10 @@ simulate_lda <- function(betas, gammas, n0=NULL) {
 }
 
 #' Simulation functions for functional equivalence experiment
-perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40, nu_max = 10, ...) {
+perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40) {
   K <- nrow(B)
   if (is.null(n_per_topic)) {
-    n_per_topic <- c(rep(5, 2), rep(1, K - 2))
+    n_per_topic <- c(rep(2, 1), rep(1, K - 1))
   }
 
   B_tilde <- list()
@@ -39,16 +39,23 @@ perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40, nu_max = 10,
     B_tilde[[k]] <- rep(1, n_per_topic[k]) %*% matrix(B[k, ], nrow = 1)
     if (n_per_topic[k] == 1) next
 
-    nu <- runif(n_per_topic[k], 1, nu_max)
     for (i in seq_len(n_per_topic[k])) {
       ix <- c(1:(subset_size / 2), (subset_size / 2 + 1):subset_size)
-      B_tilde[[k]][i, ix[1]] <- nu[i] * B_tilde[[k]][i, ix[1]]
-      B_tilde[[k]][i, ix[2]] <- (1 / nu[i]) * B_tilde[[k]][i, ix[2]]
-      B_tilde[[k]][i, ] <- B_tilde[[k]][i, ] / sum(B_tilde[[k]][i, ])
+      B_tilde[[k]][i, ] <- perturb_topic(B_tilde[[k]][i, ], ix)
     }
   }
 
   B_tilde
+}
+
+perturb_topic <- function(Bk, species_ix, alpha = NULL) {
+  if (is.null(alpha)) {
+    alpha <- rep(0.1, length(species_ix))
+  }
+
+  sub_community <- rdirichlet(1, alpha)
+  Bk[species_ix] <- sum(Bk[species_ix]) * sub_community
+  Bk
 }
 
 sample_topics <- function(B_tilde) {

@@ -43,13 +43,13 @@ set.seed(1234)
 #V <- 750
 N <- 100
 V <- 250
-K <- 5
-sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1))
+K <- 4
+sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1), subset_size = 100)
 alignment <- vis_wrapper(sim_data$x, ceiling(2 * K))
 ```
 
-```{r, fig.height = 5, fig.width = 7}
-superheat(log(1 + sim_data$x), pretty.order.rows = TRUE, pretty.order.cols = TRUE)
+```{r, fig.height = 2, fig.width = 7}
+superheat(map(sim_data$B_tilde, ~ as_tibble(.)) %>% bind_rows(), legend = FALSE)
 ```
 
 ```{r, fig.height = 3, fig.width = 6}
@@ -57,45 +57,56 @@ alignment$p2
 ```
 
 Compare the true with the estimated betas, before any perturbation.
-```{r, fig.width = 6, fig.height = 4}
+```{r}
+ordered_topics <- alignment$alignment$beta_alignment %>%
+  select(m, k_LDA, topic) %>%
+  unique()
+
+alignment$fits$betas <- alignment$fits$betas %>%
+  left_join(ordered_topics) %>%
+  select(m, K, k_LDA, topic, w, b)
+```
+
+```{r, fig.width = 2, fig.height = 8}
 beta_hats <- alignment$fits$betas %>%
-  pivot_wider(k_LDA:K, names_from = w, values_from = b)
+  pivot_wider(m:topic, names_from = w, values_from = b)
 beta_hats_mat <- beta_hats %>%
-  select(-k_LDA, -K)  %>%
+  select(matches("[0-9]+")) %>%
   as.matrix()
 similarity <- beta_hats_mat %*% t(sim_data$B) %>%
   as_tibble() %>%
-  bind_cols(beta_hats %>% select(k_LDA, K)) %>%
-  pivot_longer(starts_with("V"), names_to = "beta", values_to = "sim")
+  bind_cols(beta_hats %>% select(K, topic)) %>%
+  pivot_longer(starts_with("V"), names_to = "beta", values_to = "sim") %>%
+  filter(K < max(K))
 
-ggplot(similarity, aes(beta, k_LDA)) +
-  geom_tile(aes(fill = sim)) +
+ggplot(similarity, aes(beta, topic)) +
+  geom_tile(aes(fill = sqrt(sim))) +
   scale_fill_distiller(direction = 1) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
-  facet_wrap(~ K, scale = "free", ncol = 5)
+  facet_grid(K ~ ., scale = "free_y", space = "free")
 ```
 
 Now include the perturbed betas in the plot, and compare with estimates at a
 more refined $K$.
 
-```{r, fig.width = 6, fig.height = 4}
+```{r, fig.width = 2, fig.height = 8}
 similarity <- beta_hats_mat %*% t(do.call(rbind, sim_data$B_tilde)) %>%
   as_tibble() %>%
-  bind_cols(beta_hats %>% select(k_LDA, K)) %>%
+  bind_cols(beta_hats %>% select(K, topic)) %>%
   pivot_longer(starts_with("V"), names_to = "beta", values_to = "sim") %>%
   mutate(
     beta = str_replace(beta, "V", ""),
     beta = str_pad(beta, 2)
-  )
+  ) %>%
+  filter(K < max(K))
 
-ggplot(similarity, aes(beta, k_LDA)) +
-  geom_tile(aes(fill = sim)) +
+ggplot(similarity, aes(beta, topic)) +
+  geom_tile(aes(fill = sqrt(sim))) +
   scale_fill_distiller(direction = 1) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
-  facet_wrap(~ K, scale = "free", ncol = 5) +
-  theme(axis.text.x = element_text(size = 5, angle = 90))
+  facet_grid(K ~ ., scale = "free_y", space = "free")
 ```
 
 ```{r, fig.width = 6, fig.height = 3}
