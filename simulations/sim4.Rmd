@@ -39,40 +39,62 @@ set.seed(1234)
 ```
 
 ```{r}
-gammas <- multimodal_gammas(100, c(3, 3),c(3, 3), k_shared = 4, alpha_shared = 3)
-map(gammas, head)
+V <- 100
+lambdas <- list(beta = 1, alpha = c(1, 1), alpha_shared = 2)
+gammas <- multimodal_gammas(100, c(3, 3), lambdas$alpha, k_shared = 2, alpha_shared = lambdas$alpha_shared)
+betas <- map(gammas, ~ rdirichlet(ncol(.), rep(lambdas$beta, V)))
 ```
 
 ```{r}
-V <- 50
-betas <- map(gammas, ~ rdirichlet(ncol(.), rep(1, V)))
 x <- map(seq_along(gammas), ~ simulate_lda(betas[[.]], gammas[[.]]))
 fits <- map(x, ~ LDA(x = ., k = 7))
+gamma_hat <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(.)) %>%
+  bind_rows(.id = "m")
 ```
 
+```{r, fig.width = 4, fig.height = 4.5}
+weights <- .gamma_weights(fits[[1]]@gamma, fits[[2]]@gamma)
+scatter_data <- multimodal_scatter_data(gamma_hat, weights)
+ggplot(scatter_data, aes(gamma_source, gamma_target)) +
+  geom_abline(size = 0.5, col = "#d3d3d3") +
+  geom_point(aes(col = weight), alpha = 0.8, size = .2) +
+  facet_grid(source ~ target) +
+  coord_fixed() +
+  scale_color_viridis() +
+  theme(axis.text = element_text(size = 5))
+```
 ```{r}
-t(fits[[1]]@gamma) %*% fits[[2]]@gamma
+weights <- cor(fits[[1]]@gamma, fits[[2]]@gamma) %>%
+  .weights_to_df()
+scatter_data <- multimodal_scatter_data(gamma_hat, weights)
+ggplot(scatter_data, aes(gamma_source, gamma_target)) +
+  geom_abline(size = 0.5, col = "#d3d3d3") +
+  geom_point(aes(col = weight), alpha = 0.8, size = .2) +
+  facet_grid(source ~ target) +
+  coord_fixed() +
+  scale_color_viridis() +
+  theme(axis.text = element_text(size = 5))
 ```
 
 ```{r, fig.height = 6, fig.width = 6}
-masses <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(.)) %>%
-  bind_rows(.id = "m") %>%
+masses <- gamma_hat %>%
   pivot_longer(-m, names_to = "k_LDA", values_to = "g") %>%
-  mutate(
-    k_LDA = str_replace(k_LDA, "V", "")
-  )
+  mutate(k_LDA = str_replace(k_LDA, "V", "")) %>%
+  .topic_weights()
 
-masses <- .topic_weights(masses)
-gamma_hats <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(t(.)))
-weights <- .beta_weights(gamma_hats, masses)
-ggplot(weights, aes(k, k_next)) +
-  geom_tile(aes(fill = weight)) +
-  scale_fill_distiller(direction = 1) +
-  coord_fixed()
+gamma_list <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(t(.)))
+weights <- .beta_weights(gamma_list, masses) %>%
+  rename(source = k, target = k_next)
+scatter_data <- multimodal_scatter_data(gamma_hat, weights)
+ggplot(scatter_data, aes(gamma_source, gamma_target)) +
+  geom_abline(size = 0.5, col = "#d3d3d3") +
+  geom_point(aes(col = weight), alpha = 0.8, size = .2) +
+  facet_grid(source ~ target) +
+  coord_fixed() +
+  scale_color_viridis() +
+  theme(axis.text = element_text(size = 5))
 ```
-
 ```{r}
-gamma_hats[[1]]
-gammas[[1]][1:10, 1:4]
+cor(fits[[1]]@gamma, gammas[[1]]) %>% round(3)
+cor(fits[[2]]@gamma, gammas[[2]]) %>% round(3)
 ```
-

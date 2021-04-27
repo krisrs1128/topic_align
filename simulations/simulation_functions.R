@@ -258,3 +258,26 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
     map(~ cbind(., 1 - rowSums(.))) %>%
     map(~ set_colnames(., letters[1:ncol(.)]))
 }
+
+multimodal_scatter_data <- function(gamma_hat, weights) {
+  scatter_data <- list()
+  for (i in seq_len(nrow(weights))) {
+    scatter_data[[i]] <- bind_cols(
+      gamma_source = gamma_hat %>%
+        filter(m == 1) %>%
+        pull(str_c("V", weights$source[i])),
+      gamma_target = gamma_hat %>%
+        filter(m == 2) %>%
+        pull(str_c("V", weights$target[i])),
+    ) %>%
+      mutate(
+        weight = weights$weight[i],
+        source = weights$source[i],
+        target = weights$target[i]
+      ) %>%
+      unite(pair, c("source", "target"), remove = FALSE)
+  }
+  
+  scatter_data <- bind_rows(scatter_data) %>%
+    mutate(pair = reorder_within(pair, weight, source))
+}
