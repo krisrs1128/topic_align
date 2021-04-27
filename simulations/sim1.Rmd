@@ -10,22 +10,17 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 ```
 
 ```{r}
-library("MASS")
 library("MCMCpack")
 library("dplyr")
 library("ggplot2")
-library("ggraph")
 library("magrittr")
-library("pdist")
 library("purrr")
 library("stringr")
-library("superheat")
 library("tibble")
 library("tidygraph")
 library("tidyr")
-library("tidytext")
 library("topicmodels")
-source("R_LSY/align_topics_all_functions.R")
+source("../R_LSY/align_topics_all_functions.R")
 source("simulation_functions.R")
 set.seed(1234)
 (theme_minimal() + 
@@ -55,3 +50,37 @@ sim_data <- simulate_gradient(N, K, V, lambdas, alpha = 0.2)
 alignment <- vis_wrapper(sim_data$x, ceiling(1.5 * K))
 alignment$p2
 ```
+
+
+```{r}
+branch_scores <- list()
+alphas <- seq(0, 1, length.out = 100)
+for (i in seq_along(alphas)) {
+  sim_data <- simulate_gradient(N, K, V, lambdas, alpha = alphas[i])
+  alignment <- vis_wrapper(sim_data$x, ceiling(1.5 * K))
+  branch_scores[[i]] <- compute_score_along_branches(alignment$alignment)
+}
+
+branch_scores <- bind_rows(branch_scores, .id = "alpha") %>%
+  mutate(alpha = alphas[as.integer(alpha)])
+```
+
+
+```{r}
+ggplot(branch_scores, aes(m, score, col = alpha)) +
+  geom_line(
+    aes(group = interaction(alpha, branch)),
+    alpha = 0.8, size = 0.3
+  ) +
+  scale_color_gradient2(midpoint = 0.5)
+```
+
+```{r}
+library("readr")
+write_csv(branch_scores, "branch_scores.csv")
+```
+
+```{r}
+branch_scores
+```
+
