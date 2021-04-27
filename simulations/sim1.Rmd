@@ -1,0 +1,57 @@
+---
+title: "Simulations"
+output:
+  pdf_document:
+    template: notes/style.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
+```
+
+```{r}
+library("MASS")
+library("MCMCpack")
+library("dplyr")
+library("ggplot2")
+library("ggraph")
+library("magrittr")
+library("pdist")
+library("purrr")
+library("stringr")
+library("superheat")
+library("tibble")
+library("tidygraph")
+library("tidyr")
+library("tidytext")
+library("topicmodels")
+source("R_LSY/align_topics_all_functions.R")
+source("simulation_functions.R")
+set.seed(1234)
+(theme_minimal() + 
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#f7f7f7"),
+    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
+    legend.position = "bottom"
+  )) %>%
+  theme_set()
+```
+
+```{r}
+K <- 5
+V <- 250
+N <- 100
+lambdas <- list(beta = 0.5, gamma = 0.1, nu = 0.1)
+
+sim_data <- simulate_gradient(N, K, V, lambdas, alpha = 0.7)
+alignment <- vis_wrapper(sim_data$x, ceiling(1.5 * K))
+alignment$p2
+```
+
+
+```{r}
+sim_data <- simulate_gradient(N, K, V, lambdas, alpha = 0.2)
+alignment <- vis_wrapper(sim_data$x, ceiling(1.5 * K))
+alignment$p2
+```

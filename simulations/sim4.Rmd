@@ -1,0 +1,78 @@
+---
+title: "Simulations"
+output:
+  pdf_document:
+    template: notes/style.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
+```
+
+```{r}
+library("MASS")
+library("MCMCpack")
+library("dplyr")
+library("ggplot2")
+library("ggraph")
+library("magrittr")
+library("pdist")
+library("purrr")
+library("stringr")
+library("superheat")
+library("tibble")
+library("tidygraph")
+library("tidyr")
+library("tidytext")
+library("topicmodels")
+source("../R_LSY/align_topics_all_functions.R")
+source("simulation_functions.R")
+set.seed(1234)
+(theme_minimal() + 
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#f7f7f7"),
+    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
+    legend.position = "bottom"
+  )) %>%
+  theme_set()
+```
+
+```{r}
+gammas <- multimodal_gammas(100, c(3, 3),c(3, 3), k_shared = 4, alpha_shared = 3)
+map(gammas, head)
+```
+
+```{r}
+V <- 50
+betas <- map(gammas, ~ rdirichlet(ncol(.), rep(1, V)))
+x <- map(seq_along(gammas), ~ simulate_lda(betas[[.]], gammas[[.]]))
+fits <- map(x, ~ LDA(x = ., k = 7))
+```
+
+```{r}
+t(fits[[1]]@gamma) %*% fits[[2]]@gamma
+```
+
+```{r, fig.height = 6, fig.width = 6}
+masses <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(.)) %>%
+  bind_rows(.id = "m") %>%
+  pivot_longer(-m, names_to = "k_LDA", values_to = "g") %>%
+  mutate(
+    k_LDA = str_replace(k_LDA, "V", "")
+  )
+
+masses <- .topic_weights(masses)
+gamma_hats <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(t(.)))
+weights <- .beta_weights(gamma_hats, masses)
+ggplot(weights, aes(k, k_next)) +
+  geom_tile(aes(fill = weight)) +
+  scale_fill_distiller(direction = 1) +
+  coord_fixed()
+```
+
+```{r}
+gamma_hats[[1]]
+gammas[[1]][1:10, 1:4]
+```
+
