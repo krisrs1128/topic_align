@@ -190,7 +190,7 @@ align_pairs <- function(betas, masses, reg=1e-3) {
     group2 = rep(seq_len(N), N)
   ) %>%
     mutate(pair = row_number())
-  
+
   # perform beta-alignment
   alignments <- map2_dfr(
     pairs$group1, pairs$group2,
@@ -203,7 +203,7 @@ align_pairs <- function(betas, masses, reg=1e-3) {
     unite(target, group2, k_next, remove = F) %>%
     group_by(source) %>%
     mutate(norm_weight = weight / sum(weight, na.rm = TRUE)) %>%
-    ungroup() 
+    ungroup()
 }
 
 graph_data <- function(alignments, masses) {
@@ -229,7 +229,7 @@ graph_data <- function(alignments, masses) {
 
 multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
   stopifnot(min(ks) > 2)
-  
+
   gamma_shared <- matrix(0, n, k_shared)
   for (i in seq_len(n)) {
     v <- rbeta(k_shared, 1, alpha_shared)
@@ -238,7 +238,7 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
       gamma_shared[i, k] <- v[k] * prod(1 - v[1:(k - 1)])
     }
   }
-  
+
   used_up <- rowSums(gamma_shared)
   gammas <- map(ks, ~ matrix(0, n, . - 1))
   for (j in seq_along(gammas)) {
@@ -250,7 +250,7 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
       }
     }
   }
-  
+
   map(gammas, ~ cbind(gamma_shared, .)) %>%
     map(~ cbind(., 1 - rowSums(.))) %>%
     map(~ set_colnames(., letters[1:ncol(.)]))
@@ -274,7 +274,7 @@ multimodal_scatter_data <- function(gamma_hat, weights) {
       ) %>%
       unite(pair, c("source", "target"), remove = FALSE)
   }
-  
+
   scatter_data <- bind_rows(scatter_data) %>%
     mutate(pair = reorder_within(pair, weight, source))
 }
@@ -284,7 +284,7 @@ equivalence_similarity <- function(beta_hats_mat, B_tilde, beta_hats) {
     pivot_wider(m:k_LDA, names_from = "w", values_from = "b") %>%
     rename(topic = k_LDA) %>%
     select(K, topic)
-  
+
   cosine_similarity(beta_hats_mat, do.call(rbind, B_tilde)) %>%
     as_tibble() %>%
     bind_cols(beta_hats) %>%
@@ -300,7 +300,7 @@ beta_hat_matrix <- function(alignment, beta_hats) {
   ordered_topics <- alignment %>%
     select(m, k_LDA, topic) %>%
     unique()
-  
+
   beta_hats %>%
     left_join(ordered_topics) %>%
     select(m, K, k_LDA, topic, w, b) %>%
@@ -315,15 +315,4 @@ widen_similarity <- function(similarity, K_ = 6) {
     pivot_wider(topic, names_from = beta, values_from = sim) %>%
     select(-topic) %>%
     as.matrix()
-}
-
-permutation_distance <- function(similarity, K_ = 6) {
-  sim_mat <- widen_similarity(similarity, K_)
-  diffs <- vector(length = ncol(sim_mat))
-  for (j in seq_len(ncol(sim_mat))) {
-    print(sort(sim_mat[, j]))
-    diffs[j] <- sum(abs(sort(sim_mat[, j]) - c(rep(0, K_ - 1), 1)))
-  }
-  
-  diffs
 }
