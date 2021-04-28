@@ -10,22 +10,19 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 ```
 
 ```{r}
-library("MASS")
 library("MCMCpack")
 library("dplyr")
 library("ggplot2")
-library("ggraph")
 library("magrittr")
 library("pdist")
 library("purrr")
 library("stringr")
 library("superheat")
 library("tibble")
-library("tidygraph")
 library("tidyr")
 library("tidytext")
 library("topicmodels")
-source("R_LSY/align_topics_all_functions.R")
+source("../R_LSY/align_topics_all_functions.R")
 source("simulation_functions.R")
 set.seed(1234)
 (theme_minimal() + 
@@ -42,8 +39,8 @@ set.seed(1234)
 N <- 100
 V <- 250
 K <- 4
-sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1), subset_size = 75)
-alignment <- vis_wrapper(sim_data$x, ceiling(1.5 * K))
+sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1), subset_size = 75, alpha = 0.3)
+alignment <- vis_wrapper(sim_data$x, ceiling(1.8 * K))
 ```
 
 ```{r, fig.height = 2, fig.width = 7}
@@ -54,43 +51,76 @@ superheat(map(sim_data$B_tilde, ~ as_tibble(.)) %>% bind_rows(), legend = FALSE)
 alignment$p2
 ```
 
-Compare the true with the estimated betas, before any perturbation.
-```{r}
-ordered_topics <- alignment$alignment$beta_alignment %>%
-  select(m, k_LDA, topic) %>%
-  unique()
-
-alignment$fits$betas <- alignment$fits$betas %>%
-  left_join(ordered_topics) %>%
-  select(m, K, k_LDA, topic, w, b)
-```
-
-```{r, fig.width = 2, fig.height = 8}
-beta_hats <- alignment$fits$betas %>%
-  pivot_wider(m:topic, names_from = w, values_from = b)
-beta_hats_mat <- beta_hats %>%
-  select(matches("[0-9]+")) %>%
-  as.matrix()
-```
-
 Now include the perturbed betas in the plot, and compare with estimates at a
 more refined $K$.
 
-```{r, fig.width = 2, fig.height = 8}
-similarity <- cosine_similarity(beta_hats_mat, do.call(rbind, sim_data$B_tilde)) %>%
-  as_tibble() %>%
-  bind_cols(beta_hats %>% select(K, topic)) %>%
-  pivot_longer(starts_with("V"), names_to = "beta", values_to = "sim") %>%
-  mutate(
-    beta = str_replace(beta, "V", ""),
-    beta = str_pad(beta, 2)
-  ) %>%
-  filter(K < max(K))
+```{r, fig.width = 2.5, fig.height = 4}
+beta_hats_mat <- beta_hat_matrix(alignment$alignment$beta_alignment, alignment$fits$betas)
+similarity <- equivalence_similarity(beta_hats_mat, sim_data$B_tilde)
+sim_mat <- widen_similarity(similarity)
+sum(abs(sim_mat[, 2] - sim_mat[, 1]) + abs(sim_mat[, 4] - sim_mat[, 3]))
 
 ggplot(similarity, aes(beta, topic)) +
   geom_tile(aes(fill = sqrt(sim))) +
   scale_fill_distiller(direction = 1) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
-  facet_grid(K ~ ., scale = "free_y", space = "free")
+  facet_grid(K ~ ., scale = "free_y", space = "free") +
+  guides(fill = guide_legend(keyheight = 0.1)) +
+  theme(legend.position = "left")
 ```
+
+```{r}
+sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1), subset_size = 10, alpha = 0.3)
+alignment <- vis_wrapper(sim_data$x, 7)
+beta_hats_mat <- beta_hat_matrix(alignment$alignment$beta_alignment, alignment$fits$betas)
+similarity <- equivalence_similarity(beta_hats_mat, sim_data$B_tilde, alignment$fits$betas) %>%
+sim_mat <- widen_similarity(similarity)
+```
+
+```{r, fig.width = 2.5, fig.height = 4}
+sum(abs(sim_mat[, 2] - sim_mat[, 1]) + abs(sim_mat[, 4] - sim_mat[, 3]))
+ggplot(similarity, aes(beta, topic)) +
+  geom_tile(aes(fill = sqrt(sim))) +
+  scale_fill_distiller(direction = 1) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  facet_grid(K ~ ., scale = "free_y", space = "free") +
+  guides(fill = guide_legend(keyheight = 0.1)) +
+  theme(legend.position = "left")
+```
+
+```{r}
+N <- 50
+V <- 200
+K <- 4
+N_reps <- 10
+subset_sizes <- seq(10, 100, by = 10)
+
+sensitivity <- list()
+k <- 1
+for (i in seq_len(N_reps)) {
+  print(i)
+  for (j in seq_along(subset_sizes)) {
+    sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1), subset_size = subset_sizes[j], alpha = 0.3)
+    alignment <- vis_wrapper(sim_data$x, 7)
+    beta_hats_mat <- beta_hat_matrix(alignment$alignment$beta_alignment, alignment$fits$betas)
+    similarity <- equivalence_similarity(beta_hats_mat, sim_data$B_tilde, alignment$fits$betas)
+    sim_mat <- widen_similarity(similarity)
+    sensitivity[[k]] <- data.frame(
+      diff = sum(abs(sim_mat[, 2] - sim_mat[, 1]) + abs(sim_mat[, 4] - sim_mat[, 3])),
+      rep = i,
+      subset_size = subset_sizes[j]
+    )
+    k <- k + 1
+  }
+}
+
+sensitivity <- bind_rows(sensitivity)
+```
+
+```{r}
+ggplot(sensitivity, aes(subset_size, diff)) +
+  geom_point(position = position_jitter(w = 1))
+```
+

@@ -58,7 +58,7 @@ cosine_similarity <- function(X, Y) {
 }
 
 #' Simulation functions for functional equivalence experiment
-perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40) {
+perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40, alpha = 0.1) {
   K <- nrow(B)
   if (is.null(n_per_topic)) {
     n_per_topic <- c(rep(2, 2), rep(1, K - 2))
@@ -71,18 +71,15 @@ perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40) {
 
     for (i in seq_len(n_per_topic[k])) {
       ix <- c(1:(subset_size / 2), (subset_size / 2 + 1):subset_size)
-      B_tilde[[k]][i, ] <- perturb_topic(B_tilde[[k]][i, ], ix)
+      B_tilde[[k]][i, ] <- perturb_topic(B_tilde[[k]][i, ], ix, alpha)
     }
   }
 
   B_tilde
 }
 
-perturb_topic <- function(Bk, species_ix, alpha = NULL) {
-  if (is.null(alpha)) {
-    alpha <- rep(0.1, length(species_ix))
-  }
-
+perturb_topic <- function(Bk, species_ix, alpha = 0.1) {
+  alpha <- rep(alpha, length(species_ix))
   sub_community <- rdirichlet(1, alpha)
   Bk[species_ix] <- sum(Bk[species_ix]) * sub_community
   Bk
@@ -280,4 +277,53 @@ multimodal_scatter_data <- function(gamma_hat, weights) {
   
   scatter_data <- bind_rows(scatter_data) %>%
     mutate(pair = reorder_within(pair, weight, source))
+}
+
+equivalence_similarity <- function(beta_hats_mat, B_tilde, beta_hats) {
+  beta_hats <- beta_hats %>%
+    pivot_wider(m:k_LDA, names_from = "w", values_from = "b") %>%
+    rename(topic = k_LDA) %>%
+    select(K, topic)
+  
+  cosine_similarity(beta_hats_mat, do.call(rbind, B_tilde)) %>%
+    as_tibble() %>%
+    bind_cols(beta_hats) %>%
+    pivot_longer(starts_with("V"), names_to = "beta", values_to = "sim") %>%
+    mutate(
+      beta = str_replace(beta, "V", ""),
+      beta = str_pad(beta, 2)
+    ) %>%
+    filter(K < max(K))
+}
+
+beta_hat_matrix <- function(alignment, beta_hats) {
+  ordered_topics <- alignment %>%
+    select(m, k_LDA, topic) %>%
+    unique()
+  
+  beta_hats %>%
+    left_join(ordered_topics) %>%
+    select(m, K, k_LDA, topic, w, b) %>%
+    pivot_wider(m:topic, names_from = w, values_from = b) %>%
+    select(matches("[0-9]+")) %>%
+    as.matrix()
+}
+
+widen_similarity <- function(similarity, K_ = 6) {
+  similarity %>%
+    filter(K == K_) %>%
+    pivot_wider(topic, names_from = beta, values_from = sim) %>%
+    select(-topic) %>%
+    as.matrix()
+}
+
+permutation_distance <- function(similarity, K_ = 6) {
+  sim_mat <- widen_similarity(similarity, K_)
+  diffs <- vector(length = ncol(sim_mat))
+  for (j in seq_len(ncol(sim_mat))) {
+    print(sort(sim_mat[, j]))
+    diffs[j] <- sum(abs(sort(sim_mat[, j]) - c(rep(0, K_ - 1), 1)))
+  }
+  
+  diffs
 }
