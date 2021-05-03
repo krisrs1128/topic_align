@@ -463,12 +463,31 @@ next_level = function(f, n = 1){
     map(~ matrix(., ncol = 1))
 }
 
-.beta_weights <- function(betas, masses, reg=0.01) {
-  C <- pdist::pdist(betas[[1]], betas[[2]])
+.gamma_weights <- function(g1, g2) {
+  .weights_to_df(t(g1) %*% g2)
+}
+
+.weights_to_df <- function(x) {
+  as_tibble(x) %>%
+    mutate(source = row_number()) %>%
+    pivot_longer(-source, names_to = "target", values_to = "weight") %>%
+    mutate(target = str_replace(target, "V", "") %>% as.integer()) %>%
+    arrange(source, -weight)
+}
+
+.beta_weights <- function(betas, masses, reg=1e-4, method = "JSD") {
+  ix <- seq_len(nrow(betas[[1]]))
+  B <- bind_rows(betas)
+  if (method == "JSD") {
+    C <- philentropy::JSD(exp(as.matrix(B)))
+  } else {
+    C <- dist(B)
+  }
+  
   transport <- Barycenter::Sinkhorn(
     masses[[1]],
     masses[[2]],
-    as.matrix(C),
+    as.matrix(C)[ix, -ix, drop=FALSE],
     lambda=reg
     )$Transportplan
 

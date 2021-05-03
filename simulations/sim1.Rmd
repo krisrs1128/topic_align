@@ -1,0 +1,96 @@
+---
+title: "Simulations"
+output:
+  pdf_document:
+    template: ../notes/style.tex
+params:
+  out_dir: "/Users/kris/Desktop/"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
+```
+
+```{r}
+library("MCMCpack")
+library("dplyr")
+library("ggplot2")
+library("magrittr")
+library("purrr")
+library("stringr")
+library("tibble")
+library("tidygraph")
+library("tidyr")
+library("topicmodels")
+source("../R_LSY/align_topics_all_functions.R")
+source("simulation_functions.R")
+set.seed(1234)
+(theme_minimal() + 
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#f7f7f7"),
+    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
+    legend.position = "bottom"
+  )) %>%
+  theme_set()
+fig <- function(p) { file.path(params$out_dir, p) }
+```
+
+```{r}
+K <- 4
+V <- 250
+N <- 100
+lambdas <- list(beta = 0.5, gamma = 0.1, nu = 0.1)
+
+sim_data <- simulate_gradient(N, K, V, lambdas, alpha = 1)
+alignment <- vis_wrapper(sim_data$x, ceiling(2 * K))
+p <- alignment$p2 +
+  scale_color_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set2")
+ggsave(fig("gradient_alpha_1.png"), p, width = 4, height = 3.5)
+```
+
+
+```{r}
+sim_data <- simulate_gradient(N, K, V, lambdas, alpha = 0)
+alignment <- vis_wrapper(sim_data$x, ceiling(2 * K))
+p <- alignment$p2 +
+  scale_color_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set2")
+ggsave(fig("gradient_alpha_0.png"), p, width = 4, height = 3.5)
+```
+
+
+```{r}
+branch_scores <- list()
+alphas <- seq(0, 1, length.out = 100)
+for (i in seq_along(alphas)) {
+  sim_data <- simulate_gradient(N, K, V, lambdas, alpha = alphas[i])
+  alignment <- vis_wrapper(sim_data$x, ceiling(2 * K))
+  branch_scores[[i]] <- compute_score_along_branches(alignment$alignment)
+}
+
+branch_scores <- bind_rows(branch_scores, .id = "alpha") %>%
+  mutate(alpha = alphas[as.integer(alpha)])
+```
+
+
+```{r, fig.height = 3, fig.width = 4}
+p <- ggplot(branch_scores, aes(m, score, col = alpha)) +
+  geom_line(
+    aes(group = interaction(alpha, branch)),
+    alpha = 0.8, size = 0.3
+  ) +
+  scale_color_gradient2(midpoint = 0.5)
+ggsave(fig("alpha_gradient.png"), p, dpi = 900, height = 3, width = 4)
+```
+
+```{r}
+library("readr")
+write_csv(branch_scores, "branch_scores.csv")
+```
+
+```{r}
+branch_scores
+```
+
