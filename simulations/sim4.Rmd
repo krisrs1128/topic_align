@@ -10,18 +10,14 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 ```
 
 ```{r}
-library("MASS")
 library("MCMCpack")
 library("dplyr")
 library("ggplot2")
-library("ggraph")
 library("magrittr")
 library("pdist")
 library("purrr")
 library("stringr")
-library("superheat")
 library("tibble")
-library("tidygraph")
 library("tidyr")
 library("tidytext")
 library("topicmodels")
@@ -60,8 +56,9 @@ ggplot(scatter_data, aes(gamma_source, gamma_target)) +
   geom_point(aes(col = weight), alpha = 0.8, size = .2) +
   facet_grid(source ~ target) +
   coord_fixed() +
-  scale_color_viridis() +
+  scale_color_viridis_c() +
   theme(axis.text = element_text(size = 5))
+ggsave("~/Desktop/conceptual/public_writing/talks/20210430/figure/multimodal_memberships_gamma.png", width = 4, height = 4.5, dpi = 600)
 ```
 ```{r}
 weights <- cor(fits[[1]]@gamma, fits[[2]]@gamma) %>%
@@ -72,8 +69,9 @@ ggplot(scatter_data, aes(gamma_source, gamma_target)) +
   geom_point(aes(col = weight), alpha = 0.8, size = .2) +
   facet_grid(source ~ target) +
   coord_fixed() +
-  scale_color_viridis() +
+  scale_color_viridis_c() +
   theme(axis.text = element_text(size = 5))
+ggsave("~/Desktop/conceptual/public_writing/talks/20210430/figure/multimodal_memberships_corr.png", width = 4, height = 4.5, dpi = 600)
 ```
 
 ```{r, fig.height = 6, fig.width = 6}
@@ -91,8 +89,9 @@ ggplot(scatter_data, aes(gamma_source, gamma_target)) +
   geom_point(aes(col = weight), alpha = 0.8, size = .2) +
   facet_grid(source ~ target) +
   coord_fixed() +
-  scale_color_viridis() +
+  scale_color_viridis_c() +
   theme(axis.text = element_text(size = 5))
+ggsave("~/Desktop/conceptual/public_writing/talks/20210430/figure/multimodal_memberships_beta.png", width = 4, height = 4.5, dpi = 600)
 ```
 ```{r}
 cor(fits[[1]]@gamma, gammas[[1]]) %>% round(3)

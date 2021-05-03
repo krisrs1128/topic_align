@@ -2,7 +2,9 @@
 title: "Simulations"
 output:
   pdf_document:
-    template: notes/style.tex
+    template: ../notes/style.tex
+params:
+  out_dir: "/Users/kris/Desktop/"
 ---
 
 ```{r setup, include=FALSE}
@@ -24,7 +26,7 @@ library("tidytext")
 library("topicmodels")
 source("../R_LSY/align_topics_all_functions.R")
 source("simulation_functions.R")
-set.seed(1234)
+set.seed(12345)
 (theme_minimal() + 
   theme(
     panel.grid.minor = element_blank(),
@@ -33,64 +35,86 @@ set.seed(1234)
     legend.position = "bottom"
   )) %>%
   theme_set()
+fig <- function(p) { file.path(params$out_dir, p) }
 ```
 
 ```{r}
 N <- 100
 V <- 250
 K <- 4
-sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1), subset_size = 75, alpha = 0.3)
-alignment <- vis_wrapper(sim_data$x, ceiling(1.8 * K))
+sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1), subset_size = 75)
+alignment <- vis_wrapper(sim_data$x, 7)
 ```
 
 ```{r, fig.height = 2, fig.width = 7}
-superheat(map(sim_data$B_tilde, ~ as_tibble(.)) %>% bind_rows(), legend = FALSE)
+cols <- c('#f6eff7','#d0d1e6','#a6bddb','#67a9cf','#3690c0','#02818a','#016450')
+superheat(
+  map(sim_data$B_tilde, ~ as_tibble(.)) %>% bind_rows(), 
+  heat.pal = cols,
+  legend = FALSE
+)
 ```
 
 ```{r, fig.height = 3, fig.width = 6}
-alignment$p2
+p <- alignment$p2 +
+  scale_color_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set2")
+p
+ggsave(fig("equivalence_flows.png"), p, dpi = 900, width = 6, height = 3)
 ```
 
 Now include the perturbed betas in the plot, and compare with estimates at a
 more refined $K$.
 
-```{r, fig.width = 2.5, fig.height = 4}
+```{r, fig.width = 6, fig.height = 1.5}
 beta_hats_mat <- beta_hat_matrix(alignment$alignment$beta_alignment, alignment$fits$betas)
-similarity <- equivalence_similarity(beta_hats_mat, sim_data$B_tilde)
+similarity <- equivalence_similarity(beta_hats_mat, sim_data$B_tilde, alignment$fits$betas)
 sim_mat <- widen_similarity(similarity)
 sum(abs(sim_mat[, 2] - sim_mat[, 1]) + abs(sim_mat[, 4] - sim_mat[, 3]))
 
-ggplot(similarity, aes(beta, topic)) +
+ggplot(similarity, aes(topic, beta)) +
   geom_tile(aes(fill = sqrt(sim))) +
   scale_fill_distiller(direction = 1) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
-  facet_grid(K ~ ., scale = "free_y", space = "free") +
+  facet_grid( ~ K, scale = "free_x", space = "free") +
   guides(fill = guide_legend(keyheight = 0.1)) +
+  labs(
+    x = expression(hat(beta)[k]),
+    y = expression(beta[k]),
+    fill = "cosine similarity"
+  ) +
   theme(legend.position = "left")
+ggsave(fig("equivalence_betas_1.png"), dpi = 900, width = 6, height = 1.5)
 ```
 
 ```{r}
 sim_data <- equivalence_data(N, V, K, list(beta = .5, gamma = 0.1), subset_size = 10, alpha = 0.3)
 alignment <- vis_wrapper(sim_data$x, 7)
 beta_hats_mat <- beta_hat_matrix(alignment$alignment$beta_alignment, alignment$fits$betas)
-similarity <- equivalence_similarity(beta_hats_mat, sim_data$B_tilde, alignment$fits$betas) %>%
+similarity <- equivalence_similarity(beta_hats_mat, sim_data$B_tilde, alignment$fits$betas)
 sim_mat <- widen_similarity(similarity)
 ```
 
-```{r, fig.width = 2.5, fig.height = 4}
+```{r, fig.width = 6, fig.height = 1.5}
 sum(abs(sim_mat[, 2] - sim_mat[, 1]) + abs(sim_mat[, 4] - sim_mat[, 3]))
-ggplot(similarity, aes(beta, topic)) +
+ggplot(similarity, aes(topic, beta)) +
   geom_tile(aes(fill = sqrt(sim))) +
   scale_fill_distiller(direction = 1) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
-  facet_grid(K ~ ., scale = "free_y", space = "free") +
+  facet_grid( ~ K, scale = "free_x", space = "free") +
   guides(fill = guide_legend(keyheight = 0.1)) +
+  labs(
+    x = expression(hat(beta)[k]),
+    y = expression(beta[k]),
+    fill = "cosine similarity"
+  ) +
   theme(legend.position = "left")
+ggsave(fig("equivalence_betas_2.png"), dpi = 900, width = 6, height = 1.5)
 ```
 
-```{r}
+```{r, eval = FALSE}
 N <- 50
 V <- 200
 K <- 4
@@ -119,8 +143,13 @@ for (i in seq_len(N_reps)) {
 sensitivity <- bind_rows(sensitivity)
 ```
 
-```{r}
+```{r, eval = FALSE}
 ggplot(sensitivity, aes(subset_size, diff)) +
-  geom_point(position = position_jitter(w = 1))
+  geom_point(position = position_jitter(w = 1)) +
+  labs(
+    y = "detected difference",
+    x = expression(abs(S))
+  )
+ggsave(fig("equivalence_sensitivity.png"), dpi = 900)
 ```
 

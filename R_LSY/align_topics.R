@@ -475,12 +475,19 @@ next_level = function(f, n = 1){
     arrange(source, -weight)
 }
 
-.beta_weights <- function(betas, masses, reg=0.01) {
-  C <- pdist::pdist(betas[[1]], betas[[2]])
+.beta_weights <- function(betas, masses, reg=1e-4, method = "JSD") {
+  ix <- seq_len(nrow(betas[[1]]))
+  B <- bind_rows(betas)
+  if (method == "JSD") {
+    C <- philentropy::JSD(exp(as.matrix(B)))
+  } else {
+    C <- dist(B)
+  }
+  
   transport <- Barycenter::Sinkhorn(
     masses[[1]],
     masses[[2]],
-    as.matrix(C),
+    as.matrix(C)[ix, -ix, drop=FALSE],
     lambda=reg
     )$Transportplan
 

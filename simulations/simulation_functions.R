@@ -183,7 +183,6 @@ vis_wrapper <- function(x, M) {
 }
 
 align_pairs <- function(betas, masses, reg=1e-3) {
-  # keep track of all pairs
   N <- length(betas)
   pairs <- data.frame(
     group1 = rep(seq_len(N), each = N),
@@ -201,6 +200,7 @@ align_pairs <- function(betas, masses, reg=1e-3) {
     left_join(pairs) %>%
     unite(source, group1, k, remove = F) %>%
     unite(target, group2, k_next, remove = F) %>%
+    filter(group1 != group2) %>%
     group_by(source) %>%
     mutate(norm_weight = weight / sum(weight, na.rm = TRUE)) %>%
     ungroup()
