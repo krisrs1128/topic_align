@@ -32,14 +32,23 @@ refinement_scores <- function(gammas, K, k_LDA, K_max, daughter_threshold = .99)
     for(j in (K+2):K_max) {
         R1j = make_refinement_matrix(gammas, K, j)
         R2j = make_refinement_matrix(gammas, K+1, j)
-        descendants = which(R1j[, k_LDA] >= 0)
-        descendant_names = rownames(R1j)[descendants]
-        daughter_descendant_scores = R2j[descendant_names,daughter_names,drop = FALSE]
-        ## OR logic = min, we want everything to be a refinement
-        ## abs(.5 - x) is a function that is maximal when x is 0 or 1 (indicating a refinement) and minimal when x = .5 (indicating not a refinement)
-        scores[j - K - 1,] = apply(daughter_descendant_scores, 2, function(x) min(2 * abs(.5 - x)))
+        descendants = which(R1j[, k_LDA] >= daughter_threshold)
+        if(length(descendants) > 0) {
+            descendant_names = rownames(R1j)[descendants]
+            daughter_descendant_scores = R2j[descendant_names,daughter_names,drop = FALSE]
+            scores[j - K - 1,] = min(apply(daughter_descendant_scores, 1, max))
+            ## If there is a cluster that never has a descendant in
+            ## the set we're interested in, it needs to be treated
+            ## differently
+            cluster_with_no_refinement = Reduce(intersect, (apply(daughter_descendant_scores, 1, function(x) setdiff(1:length(x), which.max(x)))))
+            if(length(cluster_with_no_refinement) > 0) {
+                scores[j - K - 1, cluster_with_no_refinement] = apply(daughter_descendant_scores[,cluster_with_no_refinement, drop = FALSE], 2, mean)
+            }
+        } else {
+            scores[j - K - 1,] = rep(NA, ncol(scores))
+        }
     }
-    return(data.frame(score = colMeans(scores), k_LDA_next = colnames(scores)))
+    return(data.frame(score = colMeans(scores, na.rm = TRUE), k_LDA_next = colnames(scores)))
 }
 
 make_refinement_matrix <- function(gammas, m_current, m_next, version = "diagonal_scaling") {
