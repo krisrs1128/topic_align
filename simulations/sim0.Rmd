@@ -1,0 +1,79 @@
+---
+title: "Simulations"
+output:
+  pdf_document:
+    template: ../notes/style.tex
+params:
+  out_dir: "/Users/jfukuyam/Desktop/"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
+```
+
+```{r}
+library("MCMCpack")
+library("dplyr")
+library("ggplot2")
+library("magrittr")
+library("purrr")
+library("stringr")
+library("tibble")
+library("tidygraph")
+library("tidyr")
+library("topicmodels")
+source("../R_LSY/align_topics_all_functions.R")
+source("simulation_functions.R")
+source("../refinement_vis_functions.R")
+set.seed(1234)
+(theme_minimal() + 
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#f7f7f7"),
+    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
+    legend.position = "bottom"
+  )) %>%
+  theme_set()
+fig <- function(p) { file.path(params$out_dir, p) }
+```
+
+```{r}
+K <- 4
+V <- 100
+N <- 1000
+betas = rdirichlet(n = K, alpha = rep(.1, V))
+gammas = rdirichlet(n = N, alpha = rep(.05, K))
+
+sim_data <- simulate_lda(betas, gammas)
+alignment <- vis_wrapper(sim_data, ceiling(3 * K))
+```
+
+We check whether the topics are estimated correctly.
+```{r}
+par(mfrow = c(2,1))
+alignment$fits$betas %>% subset(K == 4) %>% pivot_wider(id_cols = w, names_from = k_LDA, values_from = b) %>% select(-w) %>% as.matrix %>% image
+image(t(betas))
+```
+
+Then we look at the visualization and scores:
+```{r}
+alignment$p1
+```
+
+
+```{r}
+beta_hat_2 = alignment$fits$betas %>% subset(K == 2) %>% pivot_wider(id_cols = w, names_from = k_LDA, values_from = b) %>% select(-w) %>% as.matrix
+solve(betas %*% t(betas)) %*% betas %*% beta_hat_2 %>% round(digits = 3)
+
+beta_hat_3 = alignment$fits$betas %>% subset(K == 3) %>% pivot_wider(id_cols = w, names_from = k_LDA, values_from = b) %>% select(-w) %>% as.matrix
+solve(betas %*% t(betas)) %*% betas %*% beta_hat_3 %>% round(digits = 3)
+
+beta_hat_4 = alignment$fits$betas %>% subset(K == 4) %>% pivot_wider(id_cols = w, names_from = k_LDA, values_from = b) %>% select(-w) %>% as.matrix
+solve(betas %*% t(betas)) %*% betas %*% beta_hat_4 %>% round(digits = 3)
+
+beta_hat_5 = alignment$fits$betas %>% subset(K == 5) %>% pivot_wider(id_cols = w, names_from = k_LDA, values_from = b) %>% select(-w) %>% as.matrix
+solve(betas %*% t(betas)) %*% betas %*% beta_hat_5 %>% round(digits = 3)
+
+beta_hat_6 = alignment$fits$betas %>% subset(K == 6) %>% pivot_wider(id_cols = w, names_from = k_LDA, values_from = b) %>% select(-w) %>% as.matrix
+solve(betas %*% t(betas)) %*% betas %*% beta_hat_6 %>% round(digits = 3)
+```

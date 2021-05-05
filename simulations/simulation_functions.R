@@ -174,6 +174,7 @@ fit_wrapper <- function(x, M) {
 vis_wrapper <- function(x, M) {
   fits <- run_lda_models(x, 1:M, c(.1), "VEM", 123, reset = TRUE)
   alignment <- align_topics(fits)
+  alignment = add_refinement_scores_to_alignment(fits, alignment, daughter_threshold = .5) 
   list(
     fits = fits,
     alignment = alignment,
