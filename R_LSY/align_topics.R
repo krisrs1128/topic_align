@@ -531,3 +531,39 @@ next_level = function(f, n = 1){
     ungroup() %>%
     select(m, m_next, k_LDA, k_LDA_next, weight, norm_weight)
 }
+
+cosine_similarities <- function(gammas, ...) {
+  data.frame(t(gammas[[1]]) %*% gammas[[2]]) %>%
+    rownames_to_column("k") %>%
+    pivot_longer(-k, names_to = "k_next", values_to = "weight")
+}
+
+transport_similarities <- function(gammas, betas, ...) {
+  B <- do.call(cbind, betas)
+  C <- philentropy::JSD(t(B))
+  ix <- seq_len(ncol(betas[[1]]))
+  
+  A <- matrix(0, nrow = ncol(betas[[1]]), ncol = ncol(betas[[2]]))
+  for (i in seq_len(nrow(gammas[[1]]))) {
+    a <- t(gammas[[1]][i,, drop=F])
+    b <- t(gammas[[2]][i,, drop=F])
+    A <- A + Barycenter::Sinkhorn(a, b, C[ix, -ix])$Transportplan
+  }
+  
+  dimnames(A) <- map(gammas, ~ colnames(.))
+  data.frame(A) %>%
+    rownames_to_column("k") %>%
+    pivot_longer(-k, names_to = "k_next", values_to = "weight")
+}
+
+align_sequence <- function(gamma_hats, weight_fun) {
+  weights <- list()
+  for (m in seq_along(gamma_hats)) {
+    if (m == length(gamma_hats)) break
+    weights[[m]] <- weight_fun(gamma_hats[m:(m + 1)], beta_hats[m:(m + 1)]) %>%
+      mutate(m = m, m_next = m + 1)
+  }
+  
+  bind_rows(weights) %>%
+    select(starts_with("m"), starts_with("k"), weight)
+}
