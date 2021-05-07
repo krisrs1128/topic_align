@@ -65,22 +65,8 @@ ggplot(gamma_hats %>% filter(m != 1)) +
 ```
 
 ```{r}
-gamma_hats <- fits$gammas %>%
-  split(.$m) %>%
-  map(~ select(., -m, -K)) %>%
-  map(~ rename(., doc = d)) %>%
-  map(~ pivot_wider(., doc, names_from = k_LDA, values_from = g)) %>%
-  map(~ column_to_rownames(., "doc") %>% as.matrix())
-```
-
-
-```{r}
-beta_hats <- fits$betas %>%
-  split(.$m) %>%
-  map(~ select(., -m, -K)) %>%
-  map(~ rename(., word = w)) %>%
-  map(~ pivot_wider(., word, names_from = k_LDA, values_from = b)) %>%
-  map(~ column_to_rownames(., "word") %>% as.matrix())
+gamma_hats <- split_fits(fits$gammas)
+beta_hats <- split_fits(fits$betas, "betas")
 ```
 
 ```{r}
