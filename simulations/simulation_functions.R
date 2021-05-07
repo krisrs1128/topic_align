@@ -172,7 +172,7 @@ fit_wrapper <- function(x, M) {
 }
 
 vis_wrapper <- function(x, M) {
-  fits <- run_lda_models(x, 1:M, c(.1), "VEM", 123, reset = TRUE)
+  fits <- run_lda_models(x, 1:M, c(.1), "VEM", 123, reset = FALSE)
   alignment <- align_topics(fits)
   list(
     fits = fits,
