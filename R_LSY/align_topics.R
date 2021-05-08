@@ -329,7 +329,7 @@ next_level = function(f, n = 1){
 }
 
 .lengthen_weights <- function(A) {
-  test <- A %>%
+  A %>%
     rownames_to_column("k_LDA") %>%
     pivot_longer(-k_LDA, names_to = "k_LDA_next", values_to = "weight") %>%
     mutate(k_LDA_next = str_replace(k_LDA_next, "X", ""))
