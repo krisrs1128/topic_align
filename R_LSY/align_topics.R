@@ -340,7 +340,7 @@ gamma_similarities <- function(gammas, ...) {
     .lengthen_weights()
 }
 
-transport_similarities <- function(gammas, betas, reg = 1e-3, ...) {
+transport_similarities <- function(gammas, betas, reg = 1e-1, ...) {
   B <- do.call(cbind, betas)
   C <- philentropy::JSD(t(B))
   ix <- seq_len(ncol(betas[[1]]))

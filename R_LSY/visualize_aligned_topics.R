@@ -4,7 +4,7 @@ visualize_aligned_topics =
   function(
     aligned_topics,
     add_leaves = TRUE,
-    min_beta = 1e-3,
+    min_beta = 0.025,
     n_words = NULL,
     add_words_labels = TRUE,
     reverse_x_axis = FALSE,
@@ -364,7 +364,6 @@ visualize_aligned_topics =
   alignment = aligned_topics$alignment %>%
     select(-contains("_LDA"))
 
-  m_ref = unique(gammas$m_ref)
   M = unique(gammas$m)
 
   # we compute the delta_k for each model based on the number of topics (actual + ghosts if any)
@@ -435,9 +434,7 @@ visualize_aligned_topics =
   layout_rect = layout_rect %>% filter(!is_ghost)
   layout_ribbons = layout_ribbons %>% filter(!is_ghost)
 
-  layouts = list(rect = layout_rect, ribbons = layout_ribbons)
-
-  layouts
+  list(rect = layout_rect, ribbons = layout_ribbons)
 }
 
 
