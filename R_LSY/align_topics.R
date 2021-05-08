@@ -3,43 +3,24 @@
 
 align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
 
-  # adding the reference model
-  if(is.null(m_ref)) m_ref = lda_models$gammas$m %>% levels() %>% last()
-  lda_models$gammas =
-    lda_models$gammas %>%
-    mutate(m_ref = m_ref %>%
-             factor(.,levels = levels(lda_models$gammas$m))
-    )
-
   # 1. align topics based on the gamma matrices
-
-  aligned_topics_gamma =
-    .align_topics_gamma(
-      gammas = lda_models$gammas)
+  aligned_topics_gamma = align_sequence(
+    lda_models$gammas,
+    weight_fun = gamma_similarities
+  )
 
   # 2. re-order topics based on the topic alignment
-  topics_order =
-    .order_topics(
-      aligned_topics = aligned_topics_gamma, order_constrain = order_constrain)
-
-  # we add the new order for the topics to lda_models...
-  lda_models$gammas =
-    lda_models$gammas %>%
-    left_join(., topics_order, by = c("m", "k_LDA"))
-  if("betas" %in% names(lda_models)){
-    lda_models$betas =
-      lda_models$betas %>%
-      left_join(., topics_order, by = c("m", "k_LDA"))
-  }
-
+  topics_order = .order_topics(aligned_topics_gamma, order_constrain)
   aligned_topics_gamma = .join_order(aligned_topics_gamma, topics_order)
 
   # 3. align topics based on the beta matrices if possible
-  aligned_topics_beta = .align_topics_beta(
+  aligned_topics_beta = align_sequence(
     lda_models$gammas,
-    lda_models$betas
-  )
-  aligned_topics_beta = .join_order(aligned_topics_beta, topics_order)
+    lda_models$betas,
+    transport_similarities
+  ) %>%
+    .join_order(topics_order)
+
   list(
     lda_models = lda_models,
     gamma_alignment = aligned_topics_gamma,
@@ -48,66 +29,7 @@ align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
   )
 }
 
-
-.align_topics_gamma = function(gammas){
-
-  # 1. Gamma_m
-
-  gammas_m =
-    gammas %>%
-    select(-m_ref, -K) %>%
-    filter(m != levels(gammas$m) %>% last()) %>%
-    dplyr::rename(g_m = g) %>%
-    select(d, m, k_LDA, g_m)
-
-  # 2. Gamma_m_next
-
-  gammas_m_next =
-    gammas %>%
-    select(-m_ref, -K) %>%
-    filter(m != levels(gammas$m)[1]) %>%
-    dplyr::rename(
-      m_next = m,
-      g_next = g,
-      k_LDA_next = k_LDA) %>%
-    mutate(m = next_level(m_next, n = -1)) %>%
-    select(d, m, m_next, k_LDA_next, g_next)
-
-  # 3. weights
-
-  W =
-    left_join(gammas_m,
-              gammas_m_next,
-              by = c("m","d")) %>%
-    select(d, m, m_next, k_LDA, k_LDA_next,g_m, g_next) %>%
-    mutate(w = g_m * g_next) %>%
-    group_by(m, m_next, k_LDA, k_LDA_next) %>%
-    summarize(document_mass = sum(w), .groups = "drop") %>%
-    mutate(weight = document_mass / n_distinct(gammas$d)) %>%
-    group_by(m_next, k_LDA_next) %>%
-    mutate(norm_weight = weight/sum(weight)) %>%
-    ungroup()
-
-  W
-}
-
-.align_topics_beta = function(gamma_hats, beta_hats) {
-  gamma_hats <- split_fits(gamma_hats)
-  beta_hats <- split_fits(beta_hats, "betas")
-  align_sequence(gamma_hats, beta_hats, transport_similarities)
-}
-
-.align_topics_gamma2 = function(gamma_hats, beta_hats) {
-  gamma_hats <- split_fits(gamma_hats)
-  beta_hats <- split_fits(beta_hats, "betas")
-  align_sequence(gamma_hats, beta_hats, gamma_similarities)
-}
-
-.order_topics =
-  function(
-    aligned_topics,
-    order_constrain = NULL
-  ){
+.order_topics = function(aligned_topics, order_constrain = NULL){
 
     if(is.null(order_constrain)){
       M = levels(aligned_topics$m)
@@ -404,10 +326,18 @@ next_level = function(f, n = 1){
   new_f
 }
 
-gamma_similarities <- function(gammas, ...) {
-  data.frame(t(gammas[[1]]) %*% gammas[[2]]) %>%
+.lengthen_weights <- function(A) {
+  test <- A %>%
     rownames_to_column("k_LDA") %>%
-    pivot_longer(-k_LDA, names_to = "k_LDA_next", values_to = "weight")
+    pivot_longer(-k_LDA, names_to = "k_LDA_next", values_to = "weight") %>%
+    mutate(k_LDA_next = str_replace(k_LDA_next, "X", ""))
+}
+
+gamma_similarities <- function(gammas, ...) {
+  A <- t(gammas[[1]]) %*% gammas[[2]]
+  dimnames(A) <- map(gammas, ~ colnames(.))
+  data.frame(A) %>%
+    .lengthen_weights()
 }
 
 transport_similarities <- function(gammas, betas, reg = 1e-3, ...) {
@@ -424,8 +354,7 @@ transport_similarities <- function(gammas, betas, reg = 1e-3, ...) {
 
   dimnames(A) <- map(gammas, ~ colnames(.))
   data.frame(A) %>%
-    rownames_to_column("k_LDA") %>%
-    pivot_longer(-k_LDA, names_to = "k_LDA_next", values_to = "weight")
+    .lengthen_weights()
 }
 
 align_sequence <- function(gamma_hats, beta_hats, weight_fun) {
@@ -435,13 +364,16 @@ align_sequence <- function(gamma_hats, beta_hats, weight_fun) {
     weights[[i]] <- weight_fun(gamma_hats[i:(i + 1)], beta_hats[i:(i + 1)]) %>%
       mutate(m = names(gamma_hats)[i], m_next = names(gamma_hats)[i + 1])
   }
+  postprocess_weights(weights, nrow(gamma_hats[[1]]))
+}
 
+postprocess_weights <- function(weights, n_docs) {
   bind_rows(weights) %>%
     group_by(m, m_next, k_LDA, k_LDA_next) %>%
     summarize(document_mass = sum(weight), .groups = "drop") %>%
-    mutate(weight = document_mass / nrow(gamma_hats[[1]])) %>%
+    mutate(weight = document_mass / n_docs) %>%
     group_by(m_next, k_LDA_next) %>%
-    mutate(norm_weight = weight/sum(weight)) %>%
+    mutate(norm_weight = weight / sum(weight)) %>%
     ungroup() %>%
     mutate(across(c("m", "m_next"), as.factor))
 }

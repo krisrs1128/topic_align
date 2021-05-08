@@ -50,6 +50,13 @@ alignment$p2 +
 ggsave(fig("gradient_alpha_1.png"), width = 4, height = 3.5)
 ```
 
+
+```{r}
+alignment$alignment$gamma_alignment
+alignment$alignment$beta_alignment
+```
+
+
 ```{r}
 sim_data <- simulate_gradient(N, K, V, lambdas, alpha = 0)
 alignment <- vis_wrapper(sim_data$x, ceiling(2 * K))
