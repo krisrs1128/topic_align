@@ -20,9 +20,9 @@ visualize_aligned_topics =
     max_k = ifelse(is.null(max_k), max(all_ks),max_k)
     if(min_k > min(all_ks)) stop("'min_k' must be equal or smaller than the first topic.\n")
     if(max_k < max(all_ks)) stop("'max_k' must be equal or larger than the last topic.\n")
-    aligned_topics$lda_models$betas <- .lengthen_betas(aligned_topics$lda_models$betas) %>%
+    aligned_topics$lda_models$betas <- .lengthen_betas(aligned_topics$lda_models$betas, M) %>%
       left_join(aligned_topics$topics_order)
-    aligned_topics$lda_models$gammas <- .lengthen_gammas(aligned_topics$lda_models$gammas) %>%
+    aligned_topics$lda_models$gammas <- .lengthen_gammas(aligned_topics$lda_models$gammas, M) %>%
       left_join(aligned_topics$topics_order)
 
     if(add_leaves){
@@ -125,13 +125,14 @@ visualize_aligned_topics =
 
 .add_ghost_topics_if_needed =
   function(aligned_topics, min_k, max_k){
-    gammas = aligned_topics$lda_models$gammas
-    betas = aligned_topics$lda_models$betas
     alignment = aligned_topics$alignment
     topic_order = aligned_topics$topics_order
+    gammas = aligned_topics$lda_models$gammas
+    betas = aligned_topics$lda_models$betas
 
     M = unique(topic_order$m) %>% sort()
     M = M %>% factor(., levels = M)
+
 
     # Do we need to add ghost topics?
 
@@ -190,7 +191,7 @@ visualize_aligned_topics =
 
     s = (K_max - K_g) / K_max # the scaling factor for the height and flows of the non-ghost topics
 
-    gammas = gammas %>% mutate(g = s*g)
+    gammas = gammas %>% mutate(g = s*g, m_ref = last(M))
 
     gammas_g =
       topic_order %>%
@@ -198,7 +199,7 @@ visualize_aligned_topics =
       mutate(
         d = "ghost_document",
         g = m_g,
-        m_ref = unique(gammas$m_ref)
+        m_ref = last(M)
       )
 
     gammas =
@@ -215,14 +216,12 @@ visualize_aligned_topics =
     # we need to do two things:
     # a. define ghost words for the ghost topics
     # b. define the weight of the ghost words and
-
-    if("betas" %in% names(aligned_topics$lda_models)){
-
     N_w = length(unique(betas$w)) # First, we count the current number of words
     n_w_per_topic = (N_w/length(actual_ks)) %>% round() # then we compute the average number of words per topic
     N_g = K_g * n_w_per_topic # N_g is the number of ghost words (= number of ghost topic * average number of topic)
-    mean_beta_per_topic = betas %>% group_by(m, K) %>%
-      summarize(sum_b = sum(b), .groups = "drop") %>% mutate(mean_b = sum_b/K) %>%
+    mean_beta_per_topic = betas %>% group_by(m) %>%
+      summarize(sum_b = sum(b), K = n_distinct(k_LDA), .groups = "drop") %>%
+      mutate(mean_b = sum_b / K) %>%
       ungroup() %>% select(mean_b) %>% unlist() %>% mean() # that's because we have trimmed the model
 
     betas_g =
@@ -243,7 +242,6 @@ visualize_aligned_topics =
         betas_g
       ) %>%
       arrange(m, branch, k, w)
-    }
 
 
     # 4. adding the ghost topics to the topic alignment
@@ -311,14 +309,14 @@ visualize_aligned_topics =
     )
 }
 
-.lengthen_betas <- function(betas) {
+.lengthen_betas <- function(betas, m_levels) {
   map_dfr(betas, ~ .lengthen_betas_(.), .id = "m") %>%
-    mutate(m = as.factor(m))
+    mutate(m = factor(m, levels = m_levels))
 }
 
-.lengthen_gammas <- function(gammas) {
+.lengthen_gammas <- function(gammas, m_levels) {
   map_dfr(gammas, ~ .lengthen_gammas_(.), .id = "m") %>%
-    mutate(m = as.factor(m))
+  mutate(m = factor(m, levels = m_levels))
 }
 
 .compute_topic_index = function(aligned_topics) {

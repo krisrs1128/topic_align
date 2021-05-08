@@ -1,7 +1,7 @@
 
 
 
-align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
+align_topics = function(lda_models, order_constrain = NULL){
 
   # 1. align topics based on the gamma matrices
   aligned_topics_gamma = align_sequence(
@@ -364,10 +364,10 @@ align_sequence <- function(gamma_hats, beta_hats, weight_fun) {
     weights[[i]] <- weight_fun(gamma_hats[i:(i + 1)], beta_hats[i:(i + 1)]) %>%
       mutate(m = names(gamma_hats)[i], m_next = names(gamma_hats)[i + 1])
   }
-  postprocess_weights(weights, nrow(gamma_hats[[1]]))
+  postprocess_weights(weights, nrow(gamma_hats[[1]]), names(gamma_hats))
 }
 
-postprocess_weights <- function(weights, n_docs) {
+postprocess_weights <- function(weights, n_docs, m_levels) {
   bind_rows(weights) %>%
     group_by(m, m_next, k_LDA, k_LDA_next) %>%
     summarize(document_mass = sum(weight), .groups = "drop") %>%
@@ -375,25 +375,6 @@ postprocess_weights <- function(weights, n_docs) {
     group_by(m_next, k_LDA_next) %>%
     mutate(norm_weight = weight / sum(weight)) %>%
     ungroup() %>%
-    mutate(across(c("m", "m_next"), as.factor))
-}
-
-split_fits <- function(x, parameter = "gammas") {
-  x <- x %>%
-    split(.$m) %>%
-    map(~ select(., -m, -K))
-
-  if (parameter == "gammas") {
-    x <- x %>%
-      map(~ rename(., doc = d)) %>%
-      map(~ pivot_wider(., doc, names_from = k_LDA, values_from = g)) %>%
-      map(~ column_to_rownames(., "doc") %>% as.matrix())
-  } else {
-    x <- x %>%
-      map(~ rename(., word = w)) %>%
-      map(~ pivot_wider(., word, names_from = k_LDA, values_from = b)) %>%
-      map(~ column_to_rownames(., "word") %>% as.matrix())
-  }
-
-  x
+    mutate(across(c("m", "m_next"), factor, levels = m_levels)) %>%
+    arrange(m)
 }
