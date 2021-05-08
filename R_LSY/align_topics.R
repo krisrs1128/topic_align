@@ -1,12 +1,13 @@
 
 
 
-align_topics = function(lda_models, order_constrain = NULL){
+align_topics = function(lda_models, order_constrain = NULL, ...){
 
   # 1. align topics based on the gamma matrices
   aligned_topics_gamma = align_sequence(
     lda_models$gammas,
-    weight_fun = gamma_similarities
+    weight_fun = gamma_similarities,
+    ...
   )
 
   # 2. re-order topics based on the topic alignment
@@ -17,7 +18,8 @@ align_topics = function(lda_models, order_constrain = NULL){
   aligned_topics_beta = align_sequence(
     lda_models$gammas,
     lda_models$betas,
-    transport_similarities
+    transport_similarities,
+    ...
   ) %>%
     .join_order(topics_order)
 
@@ -357,11 +359,11 @@ transport_similarities <- function(gammas, betas, reg = 1e-1, ...) {
     .lengthen_weights()
 }
 
-align_sequence <- function(gamma_hats, beta_hats, weight_fun) {
+align_sequence <- function(gamma_hats, beta_hats, weight_fun, ...) {
   weights <- list()
   for (i in seq_along(gamma_hats)) {
     if (i == length(gamma_hats)) break
-    weights[[i]] <- weight_fun(gamma_hats[i:(i + 1)], beta_hats[i:(i + 1)]) %>%
+    weights[[i]] <- weight_fun(gamma_hats[i:(i + 1)], beta_hats[i:(i + 1)], ...) %>%
       mutate(m = names(gamma_hats)[i], m_next = names(gamma_hats)[i + 1])
   }
   postprocess_weights(weights, nrow(gamma_hats[[1]]), names(gamma_hats))
