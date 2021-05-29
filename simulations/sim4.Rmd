@@ -47,11 +47,12 @@ betas <- map(gammas, ~ rdirichlet(ncol(.), rep(lambdas$beta, V)))
 ```{r}
 x <- map(seq_along(gammas), ~ simulate_lda(betas[[.]], gammas[[.]]))
 fits <- map(x, ~ LDA(x = ., k = 7))
-gamma_hat <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(.)) %>%
-  bind_rows(.id = "m")
 ```
 
+
 ```{r, fig.width = 4, fig.height = 4.5}
+gamma_hat <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(.)) %>%
+  bind_rows(.id = "m")
 weights <- .gamma_weights(fits[[1]]@gamma, fits[[2]]@gamma)
 scatter_data <- multimodal_scatter_data(gamma_hat, weights)
 ggplot(scatter_data, aes(gamma_source, gamma_target)) +

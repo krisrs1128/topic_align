@@ -39,6 +39,7 @@ fig <- function(p) { file.path(params$out_dir, p) }
 ```
 
 ```{r}
+source("../R_LSY/align_topics_all_functions.R")
 N <- 100
 V <- 250
 K <- 4
@@ -114,7 +115,7 @@ ggplot(similarity, aes(topic, beta)) +
 ggsave(fig("equivalence_betas_2.png"), dpi = 900, width = 6, height = 1.5)
 ```
 
-```{r, eval = FALSE}
+```{r}
 N <- 50
 V <- 200
 K <- 4
@@ -143,7 +144,7 @@ for (i in seq_len(N_reps)) {
 sensitivity <- bind_rows(sensitivity)
 ```
 
-```{r, eval = FALSE}
+```{r}
 ggplot(sensitivity, aes(subset_size, diff)) +
   geom_point(position = position_jitter(w = 1)) +
   labs(
