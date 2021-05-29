@@ -3,6 +3,8 @@ title: "Simulations"
 output:
   pdf_document:
     template: notes/style.tex
+params:
+  out_dir: "/Users/ksankaran/Desktop/"
 ---
 
 ```{r setup, include=FALSE}
@@ -34,6 +36,7 @@ set.seed(1234)
     legend.position = "bottom"
   )) %>%
   theme_set()
+fig <- function(p) { file.path(params$out_dir, p) }
 ```
 
 
@@ -58,7 +61,7 @@ p <- ggplot(gamma_data, aes(k_LDA, log(g))) +
     x = "topic"
   ) +
   facet_wrap(~ environment)
-#ggsave("~/Desktop/conceptual/public_writing/talks/20210430/figure/environment_gammas.png", p, dpi = 900, width = 6, height = 3)
+ggsave(fig("environment_gammas.png"), p, dpi = 900, width = 6, height = 3)
 ```
 
 ```{r}
@@ -107,7 +110,7 @@ ggplot(memberships, aes(gamma, document, fill = topic, col = topic)) +
     axis.text.y = element_blank(),
   )
 
-ggsave("~/Desktop/conceptual/public_writing/talks/20210430/figure/environment_structure_plot.png", p, dpi = 900, height = 7, width = 6)
+ggsave(fig("environment_structure_plot.png"), p, dpi = 900, height = 7, width = 6)
 ```
 
 Instead consider alignment across environments.
@@ -130,8 +133,8 @@ ggraph(G, "stress") +
   guides(fill = guide_legend(override.aes = aes(label = ""))) +
   coord_fixed() +
   scale_size(range = c(.1, 5), guide = FALSE)
-#ggsave("~/Desktop/conceptual/public_writing/talks/20210430/figure/environment_alignments.png", dpi = 900, width = 5.5, height = 4.5)
 ```
+
 ```{r, fig.height = 10, fig.width = 10}
 cols <- c('#f6eff7','#d0d1e6','#a6bddb','#67a9cf','#3690c0','#02818a','#016450')
 G %>%
@@ -142,7 +145,6 @@ G %>%
   column_to_rownames("from") %>%
   superheat(pretty.order.rows = TRUE, pretty.order.cols = TRUE, heat.pal = cols)
 ```
-
 
 ```{r}
 betas <- c(map(fits, ~ .@beta), list(log(sim_data$B))) %>%
@@ -171,7 +173,7 @@ ggraph(G, "bipartite") +
   guides(fill = guide_legend(override.aes = aes(label = ""))) +
   labs(width = "Normalized weight", col = "Environment") +
   scale_size(range = c(.1, 5), guide = FALSE)
-ggsave("~/Desktop/conceptual/public_writing/talks/20210430/figure/environments_bipartite.png", dpi = 900, width = 6, height = 3)
+ggsave(fig("environments_bipartite.png"), dpi = 900, width = 6, height = 3)
 ```
 
 

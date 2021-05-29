@@ -4,7 +4,7 @@ output:
   pdf_document:
     template: ../notes/style.tex
 params:
-  out_dir: "/Users/kris/Desktop/"
+  out_dir: "/Users/ksankaran/Desktop/"
 ---
 
 ```{r setup, include=FALSE}
