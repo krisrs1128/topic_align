@@ -359,14 +359,20 @@ transport_similarities <- function(gammas, betas, reg = 1e-1, ...) {
     .lengthen_weights()
 }
 
-align_sequence <- function(gamma_hats, beta_hats, weight_fun, ...) {
+align_graph <- function(edges, gamma_hats, beta_hats, weight_fun, ...) {
   weights <- list()
-  for (i in seq_along(gamma_hats)) {
-    if (i == length(gamma_hats)) break
-    weights[[i]] <- weight_fun(gamma_hats[i:(i + 1)], beta_hats[i:(i + 1)], ...) %>%
-      mutate(m = names(gamma_hats)[i], m_next = names(gamma_hats)[i + 1])
+  for (i in seq_len(nrow(edges))) {
+    pair <- c(edges[i, 1], edges[i, 2])
+    weights[[i]] <- weight_fun(gamma_hats[pair], beta_hats[pair], ...) %>%
+      mutate(m = pair[1], m_next = pair[2])
   }
   postprocess_weights(weights, nrow(gamma_hats[[1]]), names(gamma_hats))
+}
+
+align_sequence <- function(gamma_hats, beta_hats, weight_fun, ...) {
+  K <- length(gamma_hats)
+  edges <- data.frame(from = seq_len(K - 1), to = seq(2, K))
+  align_graph(edges, gamma_hats, beta_hats, weight_fun, ...)
 }
 
 postprocess_weights <- function(weights, n_docs, m_levels) {
