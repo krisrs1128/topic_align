@@ -7,34 +7,26 @@ align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
   if(is.null(m_ref)) m_ref = lda_models$gammas$m %>% levels() %>% last()
   lda_models$gammas =
     lda_models$gammas %>%
-    mutate(m_ref = m_ref %>%
-             factor(.,levels = levels(lda_models$gammas$m))
-    )
+    mutate(m_ref = factor(m_ref,levels = levels(m))
+  )
 
   # 1. align topics based on the gamma matrices
-
-  aligned_topics_gamma =
-    .align_topics_gamma(
-      gammas = lda_models$gammas)
+  aligned_topics_gamma = .align_topics_gamma(
+      lda_models$gammas,
+      lda_models$betas
+    )
 
   # 2. re-order topics based on the topic alignment
-  topics_order =
-    .order_topics(
-      aligned_topics = aligned_topics_gamma, order_constrain = order_constrain)
+  topics_order = .order_topics(aligned_topics_gamma, order_constrain)
 
   # we add the new order for the topics to lda_models...
-  lda_models$gammas =
-    lda_models$gammas %>%
+  lda_models$gammas = lda_models$gammas %>%
     left_join(., topics_order, by = c("m", "k_LDA"))
-  if("betas" %in% names(lda_models)){
-    lda_models$betas =
-      lda_models$betas %>%
-      left_join(., topics_order, by = c("m", "k_LDA"))
-  }
-
+  lda_models$betas = lda_models$betas %>%
+    left_join(., topics_order, by = c("m", "k_LDA"))
   aligned_topics_gamma = .join_order(aligned_topics_gamma, topics_order)
 
-  # 3. align topics based on the beta matrices if possible
+  # 3. align topics based on the beta matrices
   aligned_topics_beta = .align_topics_beta(
     lda_models$gammas,
     lda_models$betas
@@ -48,56 +40,13 @@ align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
   )
 }
 
-
-.align_topics_gamma = function(gammas){
-
-  # 1. Gamma_m
-
-  gammas_m =
-    gammas %>%
-    select(-m_ref, -K) %>%
-    filter(m != levels(gammas$m) %>% last()) %>%
-    dplyr::rename(g_m = g) %>%
-    select(d, m, k_LDA, g_m)
-
-  # 2. Gamma_m_next
-
-  gammas_m_next =
-    gammas %>%
-    select(-m_ref, -K) %>%
-    filter(m != levels(gammas$m)[1]) %>%
-    dplyr::rename(
-      m_next = m,
-      g_next = g,
-      k_LDA_next = k_LDA) %>%
-    mutate(m = next_level(m_next, n = -1)) %>%
-    select(d, m, m_next, k_LDA_next, g_next)
-
-  # 3. weights
-
-  W =
-    left_join(gammas_m,
-              gammas_m_next,
-              by = c("m","d")) %>%
-    select(d, m, m_next, k_LDA, k_LDA_next,g_m, g_next) %>%
-    mutate(w = g_m * g_next) %>%
-    group_by(m, m_next, k_LDA, k_LDA_next) %>%
-    summarize(document_mass = sum(w), .groups = "drop") %>%
-    mutate(weight = document_mass / n_distinct(gammas$d)) %>%
-    group_by(m_next, k_LDA_next) %>%
-    mutate(norm_weight = weight/sum(weight)) %>%
-    ungroup()
-
-  W
-}
-
 .align_topics_beta = function(gamma_hats, beta_hats) {
   gamma_hats <- split_fits(gamma_hats)
   beta_hats <- split_fits(beta_hats, "betas")
   align_sequence(gamma_hats, beta_hats, transport_similarities)
 }
 
-.align_topics_gamma2 = function(gamma_hats, beta_hats) {
+.align_topics_gamma = function(gamma_hats, beta_hats) {
   gamma_hats <- split_fits(gamma_hats)
   beta_hats <- split_fits(beta_hats, "betas")
   align_sequence(gamma_hats, beta_hats, gamma_similarities)
@@ -443,7 +392,7 @@ align_sequence <- function(gamma_hats, beta_hats, weight_fun) {
     group_by(m_next, k_LDA_next) %>%
     mutate(norm_weight = weight/sum(weight)) %>%
     ungroup() %>%
-    mutate(across(c("m", "m_next"), as.factor))
+    mutate(across(c("m", "m_next"), factor, levels = names(gamma_hats)))
 }
 
 split_fits <- function(x, parameter = "gammas") {
