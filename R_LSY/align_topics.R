@@ -1,37 +1,28 @@
 
 
 
-align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
-
-  # adding the reference model
-  if(is.null(m_ref)) m_ref = lda_models$gammas$m %>% levels() %>% last()
-  lda_models$gammas =
-    lda_models$gammas %>%
-    mutate(m_ref = factor(m_ref,levels = levels(m))
-  )
+align_topics = function(lda_models, order_constrain = NULL, ...){
 
   # 1. align topics based on the gamma matrices
-  aligned_topics_gamma = .align_topics_gamma(
-      lda_models$gammas,
-      lda_models$betas
-    )
+  aligned_topics_gamma = align_sequence(
+    lda_models$gammas,
+    weight_fun = gamma_similarities,
+    ...
+  )
 
   # 2. re-order topics based on the topic alignment
   topics_order = .order_topics(aligned_topics_gamma, order_constrain)
-
-  # we add the new order for the topics to lda_models...
-  lda_models$gammas = lda_models$gammas %>%
-    left_join(., topics_order, by = c("m", "k_LDA"))
-  lda_models$betas = lda_models$betas %>%
-    left_join(., topics_order, by = c("m", "k_LDA"))
   aligned_topics_gamma = .join_order(aligned_topics_gamma, topics_order)
 
-  # 3. align topics based on the beta matrices
-  aligned_topics_beta = .align_topics_beta(
+  # 3. align topics based on the beta matrices if possible
+  aligned_topics_beta = align_sequence(
     lda_models$gammas,
-    lda_models$betas
-  )
-  aligned_topics_beta = .join_order(aligned_topics_beta, topics_order)
+    lda_models$betas,
+    transport_similarities,
+    ...
+  ) %>%
+    .join_order(topics_order)
+
   list(
     lda_models = lda_models,
     gamma_alignment = aligned_topics_gamma,
@@ -40,23 +31,7 @@ align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
   )
 }
 
-.align_topics_beta = function(gamma_hats, beta_hats) {
-  gamma_hats <- split_fits(gamma_hats)
-  beta_hats <- split_fits(beta_hats, "betas")
-  align_sequence(gamma_hats, beta_hats, transport_similarities)
-}
-
-.align_topics_gamma = function(gamma_hats, beta_hats) {
-  gamma_hats <- split_fits(gamma_hats)
-  beta_hats <- split_fits(beta_hats, "betas")
-  align_sequence(gamma_hats, beta_hats, gamma_similarities)
-}
-
-.order_topics =
-  function(
-    aligned_topics,
-    order_constrain = NULL
-  ){
+.order_topics = function(aligned_topics, order_constrain = NULL){
 
     if(is.null(order_constrain)){
       M = levels(aligned_topics$m)
@@ -353,13 +328,21 @@ next_level = function(f, n = 1){
   new_f
 }
 
-gamma_similarities <- function(gammas, ...) {
-  data.frame(t(gammas[[1]]) %*% gammas[[2]]) %>%
+.lengthen_weights <- function(A) {
+  A %>%
     rownames_to_column("k_LDA") %>%
-    pivot_longer(-k_LDA, names_to = "k_LDA_next", values_to = "weight")
+    pivot_longer(-k_LDA, names_to = "k_LDA_next", values_to = "weight") %>%
+    mutate(k_LDA_next = str_replace(k_LDA_next, "X", ""))
 }
 
-transport_similarities <- function(gammas, betas, reg = 1e-3, ...) {
+gamma_similarities <- function(gammas, ...) {
+  A <- t(gammas[[1]]) %*% gammas[[2]]
+  dimnames(A) <- map(gammas, ~ colnames(.))
+  data.frame(A) %>%
+    .lengthen_weights()
+}
+
+transport_similarities <- function(gammas, betas, reg = 1e-1, ...) {
   B <- do.call(cbind, betas)
   C <- philentropy::JSD(t(B))
   ix <- seq_len(ncol(betas[[1]]))
@@ -373,44 +356,27 @@ transport_similarities <- function(gammas, betas, reg = 1e-3, ...) {
 
   dimnames(A) <- map(gammas, ~ colnames(.))
   data.frame(A) %>%
-    rownames_to_column("k_LDA") %>%
-    pivot_longer(-k_LDA, names_to = "k_LDA_next", values_to = "weight")
+    .lengthen_weights()
 }
 
-align_sequence <- function(gamma_hats, beta_hats, weight_fun) {
+align_sequence <- function(gamma_hats, beta_hats, weight_fun, ...) {
   weights <- list()
   for (i in seq_along(gamma_hats)) {
     if (i == length(gamma_hats)) break
-    weights[[i]] <- weight_fun(gamma_hats[i:(i + 1)], beta_hats[i:(i + 1)]) %>%
+    weights[[i]] <- weight_fun(gamma_hats[i:(i + 1)], beta_hats[i:(i + 1)], ...) %>%
       mutate(m = names(gamma_hats)[i], m_next = names(gamma_hats)[i + 1])
   }
+  postprocess_weights(weights, nrow(gamma_hats[[1]]), names(gamma_hats))
+}
 
+postprocess_weights <- function(weights, n_docs, m_levels) {
   bind_rows(weights) %>%
     group_by(m, m_next, k_LDA, k_LDA_next) %>%
     summarize(document_mass = sum(weight), .groups = "drop") %>%
-    mutate(weight = document_mass / nrow(gamma_hats[[1]])) %>%
+    mutate(weight = document_mass / n_docs) %>%
     group_by(m_next, k_LDA_next) %>%
-    mutate(norm_weight = weight/sum(weight)) %>%
+    mutate(norm_weight = weight / sum(weight)) %>%
     ungroup() %>%
-    mutate(across(c("m", "m_next"), factor, levels = names(gamma_hats)))
-}
-
-split_fits <- function(x, parameter = "gammas") {
-  x <- x %>%
-    split(.$m) %>%
-    map(~ select(., -m, -K))
-
-  if (parameter == "gammas") {
-    x <- x %>%
-      map(~ rename(., doc = d)) %>%
-      map(~ pivot_wider(., doc, names_from = k_LDA, values_from = g)) %>%
-      map(~ column_to_rownames(., "doc") %>% as.matrix())
-  } else {
-    x <- x %>%
-      map(~ rename(., word = w)) %>%
-      map(~ pivot_wider(., word, names_from = k_LDA, values_from = b)) %>%
-      map(~ column_to_rownames(., "word") %>% as.matrix())
-  }
-
-  x
+    mutate(across(c("m", "m_next"), factor, levels = m_levels)) %>%
+    arrange(m)
 }

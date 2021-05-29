@@ -149,7 +149,7 @@ topic_models_dir = "lda_models/"
 
 lda_models = 
   run_lda_models(
-    data = vm_16s,
+    data = as.matrix(vm_16s),
     Ks = 1:16,
     method = "VEM",
     seed = 2,
@@ -157,8 +157,8 @@ lda_models =
   )
 
 names(lda_models)
-head(lda_models$betas)
-head(lda_models$gammas)
+head(lda_models$betas[[1]])
+head(lda_models$gammas[[1]])
 
 ```
 
@@ -213,7 +213,7 @@ aligned_topics_with_c =
   align_topics(
     lda_models = lda_models,
     order_constrain = tibble(m = 16 %>% factor(., levels = 1:16),
-                             k_LDA = letters[1:16],
+                             k_LDA = as.character(1:16),
                              k = c(1,2,3,4,5,9,10,11,12,13,14,17,18, 21,22,23))
   )
 
@@ -296,9 +296,6 @@ scores %>%
 
 
 ## Example 3: aligning topic accross modalities
-
-
-
 
 
 

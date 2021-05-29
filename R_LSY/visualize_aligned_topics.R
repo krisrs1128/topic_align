@@ -13,7 +13,6 @@ visualize_aligned_topics =
     method = "gamma_alignment"
   ){
 
-
     M = levels(aligned_topics$topics_order$m)
     M = M %>% factor(., levels = M)
     all_ks = aligned_topics$topics_order$branch %>% unique() %>% sort()
@@ -21,6 +20,10 @@ visualize_aligned_topics =
     max_k = ifelse(is.null(max_k), max(all_ks),max_k)
     if(min_k > min(all_ks)) stop("'min_k' must be equal or smaller than the first topic.\n")
     if(max_k < max(all_ks)) stop("'max_k' must be equal or larger than the last topic.\n")
+    aligned_topics$lda_models$betas <- .lengthen_betas(aligned_topics$lda_models$betas, M) %>%
+      left_join(aligned_topics$topics_order)
+    aligned_topics$lda_models$gammas <- .lengthen_gammas(aligned_topics$lda_models$gammas, M) %>%
+      left_join(aligned_topics$topics_order)
 
     if(add_leaves){
       if(!is.null(n_words))
@@ -39,18 +42,15 @@ visualize_aligned_topics =
 
 
     # finally, we need to compute a topic index (for the y-position)
-    aligned_topics =
-      .compute_topic_index(aligned_topics_with_ghosts)
+    aligned_topics = .compute_topic_index(aligned_topics_with_ghosts)
 
     # compute layout translates the information of topic weights and flow into x, y, height, ymin, ymax, color
     layouts = .compute_layout(aligned_topics = aligned_topics,
                               min_k = min_k,
-                              max_k = max_k
-                              )
+                              max_k = max_k)
 
     layout_rect = layouts$rect
     layout_ribbons = layouts$ribbons
-
 
     if(add_leaves){
       leaves_layout = .compute_leaves_layout(aligned_topics, min_k = min_k, max_k = max_k)
@@ -125,17 +125,14 @@ visualize_aligned_topics =
 
 .add_ghost_topics_if_needed =
   function(aligned_topics, min_k, max_k){
-
-
-
-    gammas = aligned_topics$lda_models$gammas
-    if("betas" %in% names(aligned_topics$lda_models)) betas = aligned_topics$lda_models$betas
-
     alignment = aligned_topics$alignment
     topic_order = aligned_topics$topics_order
+    gammas = aligned_topics$lda_models$gammas
+    betas = aligned_topics$lda_models$betas
 
     M = unique(topic_order$m) %>% sort()
     M = M %>% factor(., levels = M)
+
 
     # Do we need to add ghost topics?
 
@@ -194,7 +191,7 @@ visualize_aligned_topics =
 
     s = (K_max - K_g) / K_max # the scaling factor for the height and flows of the non-ghost topics
 
-    gammas = gammas %>% mutate(g = s*g)
+    gammas = gammas %>% mutate(g = s*g, m_ref = last(M))
 
     gammas_g =
       topic_order %>%
@@ -202,7 +199,7 @@ visualize_aligned_topics =
       mutate(
         d = "ghost_document",
         g = m_g,
-        m_ref = unique(gammas$m_ref)
+        m_ref = last(M)
       )
 
     gammas =
@@ -219,14 +216,12 @@ visualize_aligned_topics =
     # we need to do two things:
     # a. define ghost words for the ghost topics
     # b. define the weight of the ghost words and
-
-    if("betas" %in% names(aligned_topics$lda_models)){
-
     N_w = length(unique(betas$w)) # First, we count the current number of words
     n_w_per_topic = (N_w/length(actual_ks)) %>% round() # then we compute the average number of words per topic
     N_g = K_g * n_w_per_topic # N_g is the number of ghost words (= number of ghost topic * average number of topic)
-    mean_beta_per_topic = betas %>% group_by(m, K) %>%
-      summarize(sum_b = sum(b), .groups = "drop") %>% mutate(mean_b = sum_b/K) %>%
+    mean_beta_per_topic = betas %>% group_by(m) %>%
+      summarize(sum_b = sum(b), K = n_distinct(k_LDA), .groups = "drop") %>%
+      mutate(mean_b = sum_b / K) %>%
       ungroup() %>% select(mean_b) %>% unlist() %>% mean() # that's because we have trimmed the model
 
     betas_g =
@@ -247,7 +242,6 @@ visualize_aligned_topics =
         betas_g
       ) %>%
       arrange(m, branch, k, w)
-    }
 
 
     # 4. adding the ghost topics to the topic alignment
@@ -295,14 +289,41 @@ visualize_aligned_topics =
          topic_order = topic_order)
   }
 
+.lengthen_betas_ <- function(beta) {
+  as_tibble(beta) %>%
+    mutate(., w = as.factor(row_number())) %>%
+    pivot_longer(., -w, names_to = "k_LDA", values_to = "b") %>%
+    mutate(
+      k_LDA = str_replace(k_LDA, "V", ""),
+      K = ncol(gamma)
+    )
+}
+
+.lengthen_gammas_ <- function(gamma) {
+  as_tibble(gamma) %>%
+    mutate(., d = as.factor(row_number())) %>%
+    pivot_longer(., -d, names_to = "k_LDA", values_to = "g") %>%
+    mutate(
+      k_LDA = str_replace(k_LDA, "V", ""),
+      K = ncol(gamma)
+    )
+}
+
+.lengthen_betas <- function(betas, m_levels) {
+  map_dfr(betas, ~ .lengthen_betas_(.), .id = "m") %>%
+    mutate(m = factor(m, levels = m_levels))
+}
+
+.lengthen_gammas <- function(gammas, m_levels) {
+  map_dfr(gammas, ~ .lengthen_gammas_(.), .id = "m") %>%
+  mutate(m = factor(m, levels = m_levels))
+}
 
 .compute_topic_index = function(aligned_topics) {
-
-  if("betas" %in% names(aligned_topics$lda_models)) betas = aligned_topics$lda_models$betas
+  betas = aligned_topics$lda_models$betas
   gammas = aligned_topics$lda_models$gammas
   alignment = aligned_topics$alignment
   topic_order = aligned_topics$topic_order
-
   all_branches = topic_order$branch %>% unique() %>% sort()
 
   topic_order =
@@ -315,9 +336,8 @@ visualize_aligned_topics =
     select(-branch_upper_part, -k_order_for_index)
 
   gammas = gammas %>% left_join(topic_order %>% select(m, topic, k_i), by = c("m","topic"))
-  if("betas" %in% names(aligned_topics$lda_models)) {
-    betas = betas %>% left_join(topic_order %>% select(m, topic, k_i), by = c("m","topic"))
-  }
+  betas = betas %>% left_join(topic_order %>% select(m, topic, k_i), by = c("m","topic"))
+
   alignment =
     alignment %>%
     left_join(
@@ -330,12 +350,10 @@ visualize_aligned_topics =
 
   # DONE
   # return the updated gammas and betas
-  lda_models = list(gammas = gammas)
-  if("betas" %in% names(aligned_topics$lda_models)) lda_models$betas = betas
+  lda_models = list(gammas = gammas, betas = betas)
   list(lda_models = lda_models,
        alignment = alignment,
        topics_order = topic_order)
-
 }
 
 
@@ -343,13 +361,10 @@ visualize_aligned_topics =
 .compute_layout = function(aligned_topics, min_k, max_k) {
 
   gammas = aligned_topics$lda_models$gammas
-
   alignment = aligned_topics$alignment %>%
     select(-contains("_LDA"))
 
-  m_ref = unique(gammas$m_ref)
   M = unique(gammas$m)
-
 
   # we compute the delta_k for each model based on the number of topics (actual + ghosts if any)
   h_m =
@@ -357,11 +372,9 @@ visualize_aligned_topics =
     group_by(m) %>%
     summarize(K = length(unique(k)), .groups = "drop") %>%
     mutate(delta_k = 1/(K+1))
-
   all_ks = min_k:max_k
 
   # RECTANGLES
-
   layout_rect =
     gammas %>%
     select(m, branch, k_i, g, is_ghost) %>%
@@ -382,7 +395,6 @@ visualize_aligned_topics =
     )
 
   # FLOWS
-
   OUT =
     alignment %>%
     mutate(m_num = match(m, M),
@@ -422,9 +434,7 @@ visualize_aligned_topics =
   layout_rect = layout_rect %>% filter(!is_ghost)
   layout_ribbons = layout_ribbons %>% filter(!is_ghost)
 
-  layouts = list(rect = layout_rect, ribbons = layout_ribbons)
-
-  layouts
+  list(rect = layout_rect, ribbons = layout_ribbons)
 }
 
 
@@ -478,18 +488,16 @@ visualize_aligned_topics =
   max_k
 ){
 
-  m_ref = unique(aligned_topics$lda_models$gammas$m_ref)
-
+  m_ref = last(aligned_topics$lda_models$gammas$m)
   adjusted_betas_ref =
     aligned_topics$lda_models$betas %>%
     filter(m == m_ref) %>%
     group_by(m, k) %>%
     mutate(b = b/sum(b))
 
-
   ref_topic_for_each_word =
     adjusted_betas_ref %>%
-    arrange(w, - b) %>%
+    arrange(w, -b) %>%
     group_by(w) %>%
     slice_head(n = 1) %>%
     ungroup() %>%
@@ -511,9 +519,7 @@ visualize_aligned_topics =
     summarize(f = sum(f), .groups = "drop") %>%
     arrange(-f)
 
-
   # rectangles
-
   total_height = est_average_freq$f %>% sum()
   delta = (2-total_height)/(max_k - min_k + 1 + nrow(est_average_freq)) # the space between words and the additional space between topics
 
@@ -529,13 +535,11 @@ visualize_aligned_topics =
            color = branch %>% factor(., levels = min_k:max_k))
 
   # Flows
-
   delta_out = 1/(max_k - min_k + 2)
-
   leaves_OUT =
     ref_topic_weights %>%
     left_join(., adjusted_betas_ref , by = "k_i") %>%
-    mutate(w = w %>%  factor(., levels = ref_topic_for_each_word$w)) %>%
+    mutate(w = w %>% factor(., levels = ref_topic_for_each_word$w)) %>%
     arrange(k_i, w) %>%
     mutate(h = weight * b) %>%
     select(m, k_i, branch, w, h) %>%
