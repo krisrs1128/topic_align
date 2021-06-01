@@ -215,6 +215,16 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
     map(~ set_colnames(., letters[1:ncol(.)]))
 }
 
+cosine_similarity <- function(X, Y) {
+  sim <- matrix(nrow = nrow(X), ncol = nrow(Y))
+  for (i in seq_len(nrow(X))) {
+    for (j in seq_len(nrow(Y))) {
+      sim[i, j] <- sum(X[i, ] * Y[j, ]) / sqrt(sum(X[i, ] ^ 2) * sum(Y[j, ] ^ 2))
+    }
+  }
+  sim
+}
+
 equivalence_similarity <- function(beta_hats_mat, B_tilde, beta_hats) {
   beta_hats <- beta_hats %>%
     pivot_wider(m:k_LDA, names_from = "w", values_from = "b") %>%
