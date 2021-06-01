@@ -47,16 +47,6 @@ simulate_gradient <- function(N, K, V, lambdas, alpha=1, n0=NULL) {
   list(B = B, gammas = gammas, x = x)
 }
 
-cosine_similarity <- function(X, Y) {
-  sim <- matrix(nrow = nrow(X), ncol = nrow(Y))
-  for (i in seq_len(nrow(X))) {
-    for (j in seq_len(nrow(Y))) {
-      sim[i, j] <- sum(X[i, ] * Y[j, ]) / sqrt(sum(X[i, ] ^ 2) * sum(Y[j, ] ^ 2))
-    }
-  }
-  sim
-}
-
 #' Simulation functions for functional equivalence experiment
 perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40, alpha = 0.1) {
   K <- nrow(B)
@@ -182,54 +172,23 @@ vis_wrapper <- function(x, M, ...) {
   )
 }
 
-align_pairs <- function(betas, masses, reg=1e-3) {
-  N <- length(betas)
-  pairs <- data.frame(
-    group1 = rep(seq_len(N), each = N),
-    group2 = rep(seq_len(N), N)
-  ) %>%
-    mutate(pair = row_number())
+graph_data <- function(alignment, gamma_hats) {
+  nodes <- map_dfr(
+      gamma_hats,
+      ~ data.frame(k_LDA = seq_len(ncol(.)), mass = colSums(.)),
+      .id = "m"
+    ) %>%
+    unite(id, c("m", "k_LDA"), remove=FALSE)
 
-  # perform beta-alignment
-  alignments <- map2_dfr(
-    pairs$group1, pairs$group2,
-    ~ .beta_weights(betas[c(.x, .y)], masses[c(.x, .y)], reg),
-    .id = "pair"
-  ) %>%
-    mutate(pair = as.integer(pair)) %>%
-    left_join(pairs) %>%
-    unite(source, group1, k, remove = F) %>%
-    unite(target, group2, k_next, remove = F) %>%
-    filter(group1 != group2) %>%
-    group_by(source) %>%
-    mutate(norm_weight = weight / sum(weight, na.rm = TRUE)) %>%
-    ungroup()
-}
+  edges <- alignment %>%
+    unite(from, c("m", "k_LDA"), remove=FALSE) %>%
+    unite(to, c("m_next", "k_LDA_next"), remove=FALSE)
 
-graph_data <- function(alignments, masses) {
-  masses_df <- masses %>%
-    map_dfr(~ tibble(mass = .) %>% mutate(k = as.factor(row_number())), .id = "group")
-  nodes <- bind_rows(
-    alignments %>%
-      select(source, group1, k) %>%
-      rename(name = source, group = group1),
-    alignments %>%
-      select(target, group2, k_next) %>%
-      rename(name = target, group = group2, k = k_next)
-  ) %>%
-    unique() %>%
-    mutate(group = as.factor(group), k = as.factor(k)) %>%
-    left_join(masses_df)
-
-  tbl_graph(
-    edges = alignments %>% select(source, target, norm_weight, weight),
-    nodes = nodes
-  )
+  tbl_graph(nodes, edges)
 }
 
 multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
   stopifnot(min(ks) > 2)
-
   gamma_shared <- matrix(0, n, k_shared)
   for (i in seq_len(n)) {
     v <- rbeta(k_shared, 1, alpha_shared)
@@ -254,29 +213,6 @@ multimodal_gammas <- function(n, ks, alphas, k_shared=4, alpha_shared = 1) {
   map(gammas, ~ cbind(gamma_shared, .)) %>%
     map(~ cbind(., 1 - rowSums(.))) %>%
     map(~ set_colnames(., letters[1:ncol(.)]))
-}
-
-multimodal_scatter_data <- function(gamma_hat, weights) {
-  scatter_data <- list()
-  for (i in seq_len(nrow(weights))) {
-    scatter_data[[i]] <- bind_cols(
-      gamma_source = gamma_hat %>%
-        filter(m == 1) %>%
-        pull(str_c("V", weights$source[i])),
-      gamma_target = gamma_hat %>%
-        filter(m == 2) %>%
-        pull(str_c("V", weights$target[i])),
-    ) %>%
-      mutate(
-        weight = weights$weight[i],
-        source = weights$source[i],
-        target = weights$target[i]
-      ) %>%
-      unite(pair, c("source", "target"), remove = FALSE)
-  }
-
-  scatter_data <- bind_rows(scatter_data) %>%
-    mutate(pair = reorder_within(pair, weight, source))
 }
 
 equivalence_similarity <- function(beta_hats_mat, B_tilde, beta_hats) {

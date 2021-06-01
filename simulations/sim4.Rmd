@@ -47,57 +47,14 @@ betas <- map(gammas, ~ rdirichlet(ncol(.), rep(lambdas$beta, V)))
 ```{r}
 x <- map(seq_along(gammas), ~ simulate_lda(betas[[.]], gammas[[.]]))
 fits <- map(x, ~ LDA(x = ., k = 7))
+names(fits) <- seq_along(fits)
 ```
 
 
-```{r, fig.width = 4, fig.height = 4.5}
-gamma_hat <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(.)) %>%
-  bind_rows(.id = "m")
-weights <- .gamma_weights(fits[[1]]@gamma, fits[[2]]@gamma)
-scatter_data <- multimodal_scatter_data(gamma_hat, weights)
-ggplot(scatter_data, aes(gamma_source, gamma_target)) +
-  geom_abline(size = 0.5, col = "#d3d3d3") +
-  geom_point(aes(col = weight), alpha = 0.8, size = .2) +
-  facet_grid(source ~ target) +
-  coord_fixed() +
-  scale_color_viridis_c() +
-  theme(axis.text = element_text(size = 5))
-ggsave(fig("multimodal_memberships_gamma.png"), width = 4, height = 4.5, dpi = 600)
-```
 ```{r}
-weights <- cor(fits[[1]]@gamma, fits[[2]]@gamma) %>%
-  .weights_to_df()
-scatter_data <- multimodal_scatter_data(gamma_hat, weights)
-ggplot(scatter_data, aes(gamma_source, gamma_target)) +
-  geom_abline(size = 0.5, col = "#d3d3d3") +
-  geom_point(aes(col = weight), alpha = 0.8, size = .2) +
-  facet_grid(source ~ target) +
-  coord_fixed() +
-  scale_color_viridis_c() +
-  theme(axis.text = element_text(size = 5))
-ggsave(fig("multimodal_memberships_corr.png"), width = 4, height = 4.5, dpi = 600)
+gamma_hats <- map(fits, ~ .@gamma)
+beta_hats <- map(fits, ~ t(.@beta))
+edges <- expand.grid(1:2, 1:2)
+align_graph(edges, gamma_hats, beta_hats, gamma_similarities)
 ```
 
-```{r, fig.height = 6, fig.width = 6}
-masses <- gamma_hat %>%
-  pivot_longer(-m, names_to = "k_LDA", values_to = "g") %>%
-  mutate(k_LDA = str_replace(k_LDA, "V", "")) %>%
-  .topic_weights()
-
-gamma_list <- map(list(fits[[1]]@gamma, fits[[2]]@gamma), ~ as_tibble(t(.)))
-weights <- .beta_weights(gamma_list, masses) %>%
-  rename(source = k, target = k_next)
-scatter_data <- multimodal_scatter_data(gamma_hat, weights)
-ggplot(scatter_data, aes(gamma_source, gamma_target)) +
-  geom_abline(size = 0.5, col = "#d3d3d3") +
-  geom_point(aes(col = weight), alpha = 0.8, size = .2) +
-  facet_grid(source ~ target) +
-  coord_fixed() +
-  scale_color_viridis_c() +
-  theme(axis.text = element_text(size = 5))
-ggsave(fig("multimodal_memberships_beta.png"), width = 4, height = 4.5, dpi = 600)
-```
-```{r}
-cor(fits[[1]]@gamma, gammas[[1]]) %>% round(3)
-cor(fits[[2]]@gamma, gammas[[2]]) %>% round(3)
-```
