@@ -1,0 +1,11 @@
+universe = docker
+docker_image = krisrs1128/alignment:0705
+log = /home/ksankaran/logs/sim1.log
+error = /home/ksankaran/logs/sim1.err
+output = /home/ksankaran/logs/sim1.out
+executable = patches.sh
+environment = "id=$(Process)"
+request_cpus = 1
+request_memory = 2GB
+request_disk = 1GB
+queue 10

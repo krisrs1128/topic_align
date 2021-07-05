@@ -12,10 +12,10 @@ widen_betas <- function(betas) {
     select(-K, -k_LDA)
 }
 
-simulate_lda <- function(betas, gammas, n0=NULL) {
+simulate_lda <- function(betas, gammas, n0=NULL, lambda=1e4) {
   n <- nrow(gammas)
   if (is.null(n0)) {
-    n0 <- rpois(n, 1000)
+    n0 <- rpois(n, lambda)
   }
 
   x <- matrix(nrow = n, ncol = ncol(betas))
