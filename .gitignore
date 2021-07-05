@@ -1,0 +1,4 @@
+simulations/.tmp/*
+simulations/*/*Rdata
+*figure-latex*
+*html*
