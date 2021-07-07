@@ -27,12 +27,12 @@ simulate_lda <- function(betas, gammas, n0=NULL, lambda=1e4) {
   x
 }
 
-simulate_gradient <- function(N, K, V, lambdas, alpha=1, n0=NULL) {
+simulate_gradient <- function(N, K, V, lambdas, alpha=1, n0=NULL, lambda=NULL) {
   B <- rdirichlet(K, rep(lambdas$beta, V))
   gammas <- rdirichlet(N, rep(lambdas$gamma, K))
   n <- nrow(gammas)
   if (is.null(n0)) {
-    n0 <- rpois(n, 1000)
+    n0 <- rpois(n, lambda)
   }
 
   x <- matrix(nrow = n, ncol = ncol(B))
