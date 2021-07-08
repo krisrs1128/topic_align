@@ -1,0 +1,106 @@
+---
+title: "Visualize Results"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tibble)
+library(purrr)
+library(stringr)
+library(tidyr)
+(theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#f7f7f7"),
+    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
+    legend.position = "bottom"
+  )) %>%
+  theme_set()
+```
+
+The simulation results we're working with are saved here: https://uwmadison.box.com/shared/static/r4er73syxl6qaaz6ysjzdopn4z1jak21.gz
+
+First, we plot the stability curves.
+
+```{r}
+read_and_process <- function(pattern, grouping, directory, max_K=10) {
+  paths <- list.files(directory, pattern, full = TRUE)
+  map_dfr(paths, read_csv) %>%
+    mutate(
+      m = factor(m, levels = str_c("K", 1:max_K)),
+      method = "transport" # eventually include product too
+    ) %>%
+    unite("group", grouping, remove = FALSE)
+}
+```
+
+```{r}
+stability_paths <- list.files("results/transport_lda_results", "*stability*", full = TRUE)
+stability <- read_and_process("*stability*", c("id", "branch"), "results/transport_lda_results/")
+ggplot(stability) +
+  geom_line(aes(m, stability, group = group), alpha = 0.4, size = 0.8)
+```
+
+
+```{r, fig.width = 10, fig.height = 3}
+ggplot(stability) +
+  geom_line(aes(m, stability, group = group), alpha = 0.4, size = 0.8) +
+  facet_wrap(~ id, ncol = 5)
+```
+
+
+```{r}
+key_topics <- read_and_process("key", c("id"), "results/transport_lda_results")
+ggplot(key_topics) +
+  geom_line(aes(x = m, y = n_key_topics, group = id), alpha = 0.6)
+```
+```{r, fig.width = 5, fig.height = 3}
+key_counts <- key_topics %>%
+  group_by(m, method) %>%
+  count(n_key_topics)
+
+ggplot(key_counts) +
+  geom_hline(yintercept = 5) +
+  geom_point(aes(x = m, y = n_key_topics, size = n))
+```
+
+```{r, fig.width = 5, fig.height = 3}
+offset_up <- key_topics %>%
+  group_by(id) %>%
+  slice_max(n_topics, n = 8) %>%
+  arrange(id, n_topics) %>%
+  rename(m_next = m, n_key_topics_next = n_key_topics) %>%
+  ungroup() %>%
+  select(m_next, n_key_topics_next)
+
+offset_down <- key_topics %>%
+  group_by(id) %>%
+  slice_min(n_topics, n = 8) %>%
+  arrange(id, n_topics) %>%
+  ungroup()
+
+key_counts <- bind_cols(offset_down, offset_up) %>%
+  count(m, m_next, n_key_topics, n_key_topics_next)
+
+ggplot(key_counts) +
+  geom_segment(aes(m, n_key_topics, xend = m_next, yend = n_key_topics_next, size = n, alpha = n)) +
+  geom_hline(yintercept = 5) +
+  scale_size(range = c(0.5, 2)) +
+  scale_alpha(range = c(0.1, 1))
+```
+```{r}
+refinement <- read_and_process("*refinement*", c("id"), "results/transport_lda_results/")
+ggplot(refinement) +
+  geom_point(aes(m, refinement_score), position = position_jitter(w = 0.1))
+ggplot(refinement) +
+  geom_violin(aes(m, refinement_score))
+ggplot(refinement) +
+  geom_boxplot(aes(m, refinement_score))
+```
