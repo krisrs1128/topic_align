@@ -4,6 +4,10 @@ params:
   out_dir: "."
   method: "transport"
   id: 1
+  K: 5
+  V: 1000
+  N: 100
+  n_models: 10
 ---
 
 ```{r setup, include=FALSE}
@@ -11,30 +15,23 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 ```
 
 ```{r}
-library("MCMCpack")
-library("alto")
-library("dplyr")
-library("readr")
-library("ggplot2")
+library(MCMCpack)
+library(alto)
+library(dplyr)
+library(readr)
+library(ggplot2)
 source("simulation_functions.R")
-library("stringr")
-library("purrr")
+library(stringr)
+library(purrr)
 set.seed(params$id)
-(theme_minimal() +
-  theme(
-    panel.grid.minor = element_blank(),
-    panel.background = element_rect(fill = "#f7f7f7"),
-    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
-    legend.position = "bottom"
-  )) %>%
-  theme_set()
+my_theme()
 ```
 
 ```{r}
-K <- 5
-V <- 1000
-N <- 100
-n_models <- 10
+K <- params$K
+V <- params$V
+N <- params$N
+n_models <- params$n_models
 lambdas <- list(beta = 0.5, gamma = 0.5, count = 1e4)
 
 betas <- rdirichlet(K, rep(lambdas$beta, V))
