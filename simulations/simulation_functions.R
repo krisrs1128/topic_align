@@ -56,7 +56,8 @@ perturb_topics <- function(B, n_per_topic = NULL, subset_size = 40, alpha = 0.1)
     if (n_per_topic[k] == 1) next
 
     for (i in seq_len(n_per_topic[k])) {
-      ix <- c(1:(subset_size / 2), (subset_size / 2 + 1):subset_size)
+      #ix <- c(1:(subset_size / 2), (subset_size / 2 + 1):subset_size)
+      ix <- seq_len(subset_size)
       B_tilde[[k]][i, ] <- perturb_topic(B_tilde[[k]][i, ], ix, alpha)
     }
   }
@@ -80,33 +81,38 @@ sample_topics <- function(B_tilde) {
   B
 }
 
-simulate_document <- function(B, gamma_i, n0) {
+simulate_document <- function(topics, gamma_i, n0) {
   z <- rmultinom(1, n0, gamma_i)
-  x <- vector(length = ncol(B))
+  x <- vector(length = ncol(topics))
   for (k in seq_along(z)) {
-    x <- x + rmultinom(1, z[k], B[k, ])
+    x <- x + rmultinom(1, z[k], topics[k, ])
   }
   x
 }
 
-equivalence_data <- function(N, V, K, lambdas, n0 = NULL, ...) {
+equivalence_data <- function(N, V, K, lambdas, subset_size, n0 = NULL) {
   if (is.null(n0)) {
-    n0 <- rpois(N, 1000)
+    n0 <- rpois(N, lambdas$count)
   }
 
-  B <- MCMCpack::rdirichlet(K, rep(lambdas$beta, V))
-  B_tilde <- perturb_topics(B, ...)
+  topics <- MCMCpack::rdirichlet(K, rep(lambdas$beta, V))
+  perturbed_topics <- perturb_topics(
+    topics,
+    subset_size = subset_size,
+    alpha = lambdas$alpha
+  )
   gammas <- MCMCpack::rdirichlet(N, rep(lambdas$gamma, K))
   x <- matrix(nrow = N, ncol = V)
 
   for (i in seq_len(N)) {
-    B_i <- sample_topics(B_tilde)
-    x[i, ] <- simulate_document(B_i, gammas[i, ], n0[i])
+    local_topic <- sample_topics(perturbed_topics)
+    x[i, ] <- simulate_document(local_topic, gammas[i, ], n0[i])
   }
 
   colnames(x) <- seq_len(ncol(x))
   rownames(x) <- seq_len(nrow(x))
-  list(x = x, B = B, B_tilde = B_tilde, gammas = gammas)
+  list(x = x, topics = topics, perturbed_topics = perturbed_topics,
+       gammas = gammas)
 }
 
 equivalence_similarity <- function(beta_hats_mat, B_tilde, beta_hats) {
@@ -161,12 +167,19 @@ bind_and_write <- function(scores, out_name, id) {
 }
 
 my_theme <- function() {
-  (ggplot2::theme_minimal() +
+  th <- ggplot2::theme_minimal() +
     ggplot2::theme(
       panel.grid.minor = ggplot2::element_blank(),
       panel.background = ggplot2::element_rect(fill = "#f7f7f7"),
       panel.border = ggplot2::element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
       legend.position = "bottom"
-  )) %>%
-  ggplot2::theme_set()
+  )
+  ggplot2::theme_set(th)
+}
+
+save_str <- function(prefix, id_vars, suffix = "csv") {
+  out_dir <- id_vars$out_dir
+  id_vars$out_dir <- NULL
+  s <- stringr::str_c(paste0(id_vars, collapse = "_"), ".", suffix)
+  file.path(out_dir, s)
 }
