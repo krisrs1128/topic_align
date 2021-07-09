@@ -15,14 +15,8 @@ library(tibble)
 library(purrr)
 library(stringr)
 library(tidyr)
-(theme_minimal() +
-  theme(
-    panel.grid.minor = element_blank(),
-    panel.background = element_rect(fill = "#f7f7f7"),
-    panel.border = element_rect(fill = NA, color = "#0c0c0c", size = 0.6),
-    legend.position = "bottom"
-  )) %>%
-  theme_set()
+source("simulation_functions.R")
+my_theme()
 ```
 
 The simulation results we're working with are saved here: https://uwmadison.box.com/shared/static/r4er73syxl6qaaz6ysjzdopn4z1jak21.gz
