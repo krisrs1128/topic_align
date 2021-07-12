@@ -1,6 +1,5 @@
 #!/bin/bash
 
-wget https://uwmadison.box.com/shared/static/cfkmr6jy8v23ftvdbqqxc27dscgoavas.gz
-mv cfkmr6jy8v23ftvdbqqxc27dscgoavas.gz alto.tar.gz
-tar -zxvf alto.tar.gz
-Rscript -e "library(devtools); install('alto')"
+wget https://uwmadison.box.com/shared/static/1sfjta05ndsu9q8ok1shj6zfekcnn1r5.gz
+mv 1sfjta05ndsu9q8ok1shj6zfekcnn1r5.gz alto_0.1.0.tar.gz
+R CMD INSTALL alto_0.1.0.tar.gz

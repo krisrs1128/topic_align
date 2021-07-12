@@ -1,0 +1,11 @@
+universe = docker
+docker_image = krisrs1128/alignment:071002
+log = /home/ksankaran/logs/gradient-$(Process).log
+error = /home/ksankaran/logs/gradient-$(Process).err
+output = /home/ksankaran/logs/gradient-$(Process).out
+executable = sim_gradient.sh
+environment = "id=$(Process)"
+request_cpus = 1
+request_memory = 1GB
+request_disk = 500MB
+queue 1

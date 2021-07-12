@@ -1,0 +1,11 @@
+universe = docker
+docker_image = krisrs1128/alignment:071002
+log = /home/ksankaran/logs/lda-$(Process).log
+error = /home/ksankaran/logs/lda-$(Process).err
+output = /home/ksankaran/logs/lda-$(Process).out
+executable = sim_lda.sh
+environment = "id=$(Process)"
+request_cpus = 1
+request_memory = 1GB
+request_disk = 500MB
+queue 1

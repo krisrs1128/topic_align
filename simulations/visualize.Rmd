@@ -1,6 +1,8 @@
 ---
 title: "Visualize Results"
 output: html_notebook
+params:
+    results_dir: "results/"
 ---
 
 ```{r setup, include=FALSE}
@@ -15,7 +17,7 @@ library(tibble)
 library(purrr)
 library(stringr)
 library(tidyr)
-source("simulation_functions.R")
+source("https://raw.githubusercontent.com/krisrs1128/topic_align/main/simulations/simulation_functions.R")
 my_theme()
 ```
 
@@ -24,20 +26,19 @@ The simulation results we're working with are saved here: https://uwmadison.box.
 First, we plot the stability curves.
 
 ```{r}
-read_and_process <- function(pattern, grouping, directory, max_K=10) {
-  paths <- list.files(directory, pattern, full = TRUE)
-  map_dfr(paths, read_csv) %>%
+read_and_process <- function(grouping, directory, max_K=10) {
+  paths <- list.files(directory, "*.csv", full = TRUE)
+  map_dfr(paths, read_csv, .id = "file") %>%
     mutate(
       m = factor(m, levels = str_c("K", 1:max_K)),
-      method = "transport" # eventually include product too
+      method = ifelse(grepl("product", file), "product", "transport")
     ) %>%
     unite("group", grouping, remove = FALSE)
 }
 ```
 
 ```{r}
-stability_paths <- list.files("results/transport_lda_results", "*stability*", full = TRUE)
-stability <- read_and_process("*stability*", c("id", "branch"), "results/transport_lda_results/")
+stability <- read_and_process(c("id", "branch"), file.path(params$results_dir, "lda"))
 ggplot(stability) +
   geom_line(aes(m, stability, group = group), alpha = 0.4, size = 0.8)
 ```
@@ -51,10 +52,11 @@ ggplot(stability) +
 
 
 ```{r}
-key_topics <- read_and_process("key", c("id"), "results/transport_lda_results")
+key_topics <- read_and_process("key", c("id"), file.path(params$results_dir, "lda"))
 ggplot(key_topics) +
   geom_line(aes(x = m, y = n_key_topics, group = id), alpha = 0.6)
 ```
+
 ```{r, fig.width = 5, fig.height = 3}
 key_counts <- key_topics %>%
   group_by(m, method) %>%
