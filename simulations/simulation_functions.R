@@ -139,5 +139,5 @@ save_str <- function(prefix, id_vars, suffix = "csv") {
   out_dir <- id_vars$out_dir
   id_vars$out_dir <- NULL
   s <- stringr::str_c(paste0(id_vars, collapse = "_"), ".", suffix)
-  file.path(out_dir, s)
+  file.path(out_dir, stringr::str_c(prefix, "-", s))
 }
