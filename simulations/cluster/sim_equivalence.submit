@@ -6,6 +6,6 @@ output = /home/ksankaran/logs/equiv-$(Process).out
 executable = sim_equivalence.sh
 environment = "id=$(Process)"
 request_cpus = 1
-request_memory = 1GB
-request_disk = 500MB
-queue 1
+request_memory = 500MB
+request_disk = 75MB
+queue 25
