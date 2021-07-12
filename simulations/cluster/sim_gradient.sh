@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-cp /srv/rlibs/alto/doc/$script .
+cp /srv/rlibs/alto/doc/*Rmd .
 
 for (( k = 0; k < 2; ++k )); do
   export RUN=$( expr 2 '*' "$id" + "$k")
