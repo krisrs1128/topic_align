@@ -23,7 +23,8 @@ my_theme()
 
 ### True LDA Experiment
 
-The simulation results we're working with are saved here: https://uwmadison.box.com/shared/static/r4er73syxl6qaaz6ysjzdopn4z1jak21.gz
+The simulation results we're working with are saved here: 
+https://uwmadison.box.com/shared/static/accan0ji43d7l97bia2fa9ai5zu826xm.gz
 
 First, we plot the stability curves.
 
