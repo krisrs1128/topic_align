@@ -26,7 +26,19 @@ my_theme()
 The simulation results we're working with are saved here: 
 https://uwmadison.box.com/shared/static/accan0ji43d7l97bia2fa9ai5zu826xm.gz
 
-First, we plot the stability curves.
+First, we plot a random flow.
+
+```{r, fig.height = 3, fig.width = 5}
+lda_dir <- file.path(params$results_dir, "lda")
+fit <- get(load(file.path(lda_dir, "exper-product_0_250_1000_5.rda")))
+#plot(fit[2][[1]]) +
+#  labs(x = "K Topics") +
+#  theme(axis.text.y = element_blank())
+#ggsave("~/Downloads/product-true-lda.png", dpi=700)
+```
+
+
+Now, we plot the stability curves.
 
 ```{r}
 read_and_process <- function(pattern, grouping, directory, max_K=10) {
@@ -42,7 +54,6 @@ read_and_process <- function(pattern, grouping, directory, max_K=10) {
 ```
 
 ```{r}
-lda_dir <- file.path(params$results_dir, "lda")
 stability <- read_and_process("stability*", c("id", "branch"), lda_dir)
 ```
 
@@ -71,11 +82,13 @@ ggplot(key_topics) +
 ```{r, fig.width = 5, fig.height = 3}
 key_counts <- key_topics %>%
   group_by(m, method) %>%
-  count(n_key_topics)
+  count(n_key_topics) %>%
+  filter(m != "K10")
 
 ggplot(key_counts) +
   geom_hline(yintercept = 5) +
   geom_point(aes(x = m, y = n_key_topics, size = n))
+ggsave("~/Desktop/key_topics-lda.png", dpi=800)
 ```
 
 ```{r, fig.width = 5, fig.height = 3}
@@ -94,7 +107,7 @@ offset_down <- key_topics %>%
   ungroup()
 
 key_counts <- bind_cols(offset_down, offset_up) %>%
-  count(m, m_next, n_key_topics, n_key_topics_next) %>%
+  count(m, m_next, n_key_topics, n_key_topics_next)
 ```
 
 ```{r, fig.width = 5, fig.height = 3}
@@ -114,6 +127,14 @@ ggplot(refinement) +
     alpha = 0.1, size = 0.2
   ) +
   scale_y_log10()
+```
+```{r}
+ggplot(refinement) +
+  geom_violin(
+    aes(m, refinement_score)
+  ) +
+  scale_y_log10()
+ggsave("~/Desktop/refinement_lda.png", dpi=800)
 ```
 
 #### Gradient Experiment
@@ -135,6 +156,7 @@ ggplot(stability) +
 ggplot(stability) +
   geom_line(aes(m, stability, group = group, col = alpha), alpha = 0.2, size = 0.3) +
   scale_color_viridis_c()
+ggsave("~/Desktop/gradient_stability.png", dpi = 1000)
 ```
 
 ```{r}
@@ -159,13 +181,14 @@ ggplot(key_counts) +
 ```
 
 
-```{r, fig.width = 9, fig.height = 3}
-ggplot(key_counts) +
+```{r, fig.width = 5, fig.height = 2}
+ggplot(key_counts %>% filter(m != "K10")) +
   geom_hline(yintercept = 5) +
   geom_point(aes(m, n_key_topics, col = alpha, size = n)) +
   scale_color_viridis_c() +
   scale_size(range = c(0, 3)) +
   facet_wrap(~ alpha, ncol = 6)
+ggsave("~/Desktop/gradient_key_topics.png", dpi = 1000)
 ```
 
 ```{r}
@@ -177,6 +200,7 @@ refinement <- read_and_process("refinement*", c("file"), gradient_dir) %>%
 ```{r}
 refinement
 ```
+
 ```{r, fig.height = 3, fig.width = 5}
 ggplot(refinement %>% filter(m != "K10")) +
   geom_point(
@@ -187,15 +211,16 @@ ggplot(refinement %>% filter(m != "K10")) +
   scale_color_viridis_c() +
   scale_y_log10()
 ```
-```{r, fig.height = 3, fig.width = 9}
+```{r, fig.height = 2, fig.width = 5}
 ggplot(refinement %>% filter(m != "K10")) +
-  geom_point(
-    aes(m, refinement_score, col = alpha), 
-    position = position_jitter(w = 0.1),
-    alpha = 0.1, size = 0.2
+  geom_violin(
+    aes(m, refinement_score, fill = alpha)
   ) +
   facet_wrap(~ alpha, ncol = 6) +
-  scale_color_viridis_c() +
-  scale_y_log10()
+  scale_fill_viridis_c() +
+  labs(y = "Refinement", x = "m", fill = expression(alpha)) +
+  scale_y_log10() +
+  theme(axis.text.x = element_text(size = 6))
+ggsave("~/Desktop/gradient_refinement.png", dpi = 1000)
 ```
 
