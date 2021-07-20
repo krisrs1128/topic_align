@@ -1,11 +1,11 @@
 universe = docker
-docker_image = krisrs1128/alignment:071002
+docker_image = krisrs1128/alignment:071901
 log = /home/ksankaran/logs/equiv-$(Process).log
 error = /home/ksankaran/logs/equiv-$(Process).err
 output = /home/ksankaran/logs/equiv-$(Process).out
 executable = sim_equivalence.sh
 environment = "id=$(Process)"
 request_cpus = 1
-request_memory = 500MB
-request_disk = 75MB
+request_memory = 2GB
+request_disk = 500MB
 queue 25

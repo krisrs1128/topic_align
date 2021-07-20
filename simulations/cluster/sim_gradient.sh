@@ -2,10 +2,11 @@
 
 cp /srv/rlibs/alto/doc/*Rmd .
 
-for (( k = 0; k < 2; ++k )); do
-  export RUN=$( expr 2 '*' "$id" + "$k")
-  for alpha in $(seq 0.0 0.05 1); do
-    Rscript -e "rmarkdown::render('sim_gradient.Rmd', params=list(id = $RUN, alpha=$alpha))"
+for (( k = 0; k < 1; ++k )); do
+  export RUN=$( expr 1 '*' "$id" + "$k")
+  for alpha in $(seq 0.0 0.1 1); do
+    Rscript -e "rmarkdown::render('sim_gradient.Rmd', params=list(id = $RUN, alpha=$alpha, method='product'))"
+    Rscript -e "rmarkdown::render('sim_gradient.Rmd', params=list(id = $RUN, alpha=$alpha, method='transport'))"
   done;
 done;
 
