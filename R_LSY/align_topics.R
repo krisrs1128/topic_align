@@ -35,16 +35,17 @@ align_topics = function(lda_models, m_ref = NULL, order_constrain = NULL){
   aligned_topics_gamma = .join_order(aligned_topics_gamma, topics_order)
 
   # 3. align topics based on the beta matrices if possible
-  aligned_topics_beta = .align_topics_beta(
-    lda_models$gammas,
-    lda_models$betas
-  )
-  aligned_topics_beta = .join_order(aligned_topics_beta, topics_order)
+  # aligned_topics_beta = .align_topics_beta(
+  #   lda_models$betas,
+  #   lda_models$gammas
+  # )
+  # aligned_topics_beta = .join_order(aligned_topics_beta, topics_order)
+
   list(
     lda_models = lda_models,
     gamma_alignment = aligned_topics_gamma,
-    topics_order = topics_order,
-    beta_alignment = aligned_topics_beta
+    topics_order = topics_order#,
+    #beta_alignment = aligned_topics_beta
   )
 }
 
