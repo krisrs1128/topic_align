@@ -1,0 +1,6 @@
+simulations/.tmp/*
+simulations/*/*Rdata
+*figure-latex*
+*html*
+simulations/results
+*.tar.gz
