@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 ```
 
 ```{r}
+library(alto)
 library(dplyr)
 library(ggplot2)
 library(readr)
@@ -23,18 +24,25 @@ my_theme()
 
 ### True LDA Experiment
 
-The simulation results we're working with are saved here: 
+The simulation results we're working with are saved here:
 https://uwmadison.box.com/shared/static/accan0ji43d7l97bia2fa9ai5zu826xm.gz
 
 First, we plot a random flow.
 
 ```{r, fig.height = 3, fig.width = 5}
 lda_dir <- file.path(params$results_dir, "lda")
-fit <- get(load(file.path(lda_dir, "exper-product_0_250_1000_5.rda")))
-#plot(fit[2][[1]]) +
-#  labs(x = "K Topics") +
-#  theme(axis.text.y = element_blank())
+fits <- list(
+  get(load(file.path(lda_dir, "exper-product_0_250_1000_5.rda")))[2],
+  get(load(file.path(lda_dir, "exper-transport_0_250_1000_5.rda")))[2]
+)
+plot(fits[[1]][[1]]) +
+  labs(x = "K Topics") +
+  theme(axis.text.y = element_blank())
 #ggsave("~/Downloads/product-true-lda.png", dpi=700)
+plot(fits[[2]][[1]]) +
+  labs(x = "K Topics") +
+  theme(axis.text.y = element_blank())
+#ggsave("~/Downloads/transport-true-lda.png", dpi=700)
 ```
 
 
@@ -46,15 +54,15 @@ read_and_process <- function(pattern, grouping, directory, max_K=10) {
   map_dfr(paths, read_csv, .id = "file") %>%
     mutate(
       m = factor(m, levels = str_c("K", 1:max_K)),
-      method = ifelse(grepl("product", file), "product", "transport"),
-      file = basename(paths[as.integer(file)])
+      file = basename(paths[as.integer(file)]),
+      method = ifelse(grepl("product", file), "product", "transport")
     ) %>%
     unite("group", grouping, remove = FALSE)
 }
 ```
 
 ```{r}
-stability <- read_and_process("stability*", c("id", "branch"), lda_dir)
+stability <- read_and_process("stability*", c("id", "branch", "method"), lda_dir)
 ```
 
 Notice there are few new branches that begin after K5, and those that do decay
@@ -62,7 +70,8 @@ quite quickly.
 
 ```{r, fig.width = 6, fig.height = 3}
 ggplot(stability) +
-  geom_line(aes(m, stability, group = group), alpha = 0.1, size = 0.2)
+  geom_line(aes(m, stability, group = group), alpha = 0.2, size = 0.2) +
+  facet_grid(. ~ method)
 ```
 
 
@@ -87,8 +96,9 @@ key_counts <- key_topics %>%
 
 ggplot(key_counts) +
   geom_hline(yintercept = 5) +
-  geom_point(aes(x = m, y = n_key_topics, size = n))
-ggsave("~/Desktop/key_topics-lda.png", dpi=800)
+  geom_point(aes(x = m, y = n_key_topics, size = n)) +
+  facet_wrap(~ method)
+#ggsave("~/Desktop/key_topics-lda.png", dpi=800)
 ```
 
 ```{r, fig.width = 5, fig.height = 3}
@@ -122,7 +132,7 @@ ggplot(key_counts %>% filter(m_next != "K10")) +
 refinement <- read_and_process("*refinement*", c("id"), lda_dir)
 ggplot(refinement) +
   geom_point(
-    aes(m, refinement_score), 
+    aes(m, refinement_score),
     position = position_jitter(w = 0.1),
     alpha = 0.1, size = 0.2
   ) +
@@ -133,8 +143,10 @@ ggplot(refinement) +
   geom_violin(
     aes(m, refinement_score)
   ) +
-  scale_y_log10()
-ggsave("~/Desktop/refinement_lda.png", dpi=800)
+  scale_y_log10() +
+  labs(x = "K Topics", y = "refinement") +
+  facet_wrap(~ method, scale = "free_y")
+#ggsave("~/Desktop/refinement_lda.png", dpi=800)
 ```
 
 #### Gradient Experiment
@@ -146,17 +158,19 @@ stability <- read_and_process("stability*", c("branch", "file"), gradient_dir) %
   mutate(across(alpha:K, as.numeric))
 ```
 
-```{r, fig.width = 9, fig.height = 3}
+```{r, fig.width = 4, fig.height = 10}
+#ggplot(stability %>% filter(alpha %in% seq(0, 1, 0.2))) +
 ggplot(stability) +
   geom_line(aes(m, stability, col = alpha, group = group), alpha = 0.2, size = 0.5) +
   scale_color_viridis_c() +
-  facet_wrap(~ alpha, ncol = 6)
+  facet_grid(alpha ~ method)
+#ggsave("~/Desktop/gradient_stability_subset.png", dpi = 1000)
+#ggsave("~/Desktop/gradient_stability.png", dpi = 1000)
 ```
 ```{r, fig.width = 5, fig.height = 3}
 ggplot(stability) +
   geom_line(aes(m, stability, group = group, col = alpha), alpha = 0.2, size = 0.3) +
   scale_color_viridis_c()
-ggsave("~/Desktop/gradient_stability.png", dpi = 1000)
 ```
 
 ```{r}
@@ -173,22 +187,23 @@ key_counts <- key_topics %>%
 ggplot(key_counts) +
   geom_hline(yintercept = 5) +
   geom_point(
-    aes(m, n_key_topics, col = alpha, size = n), 
+    aes(m, n_key_topics, col = alpha, size = n),
     alpha = 0.4, position = position_jitter(w = 0.1, h = 0.1)
   ) +
   scale_size(range = c(0, 3)) +
-  scale_color_viridis_c()
+  scale_color_viridis_c() +
+  facet_wrap(~ method)
 ```
 
 
-```{r, fig.width = 5, fig.height = 2}
+```{r, fig.width = 8, fig.height = 4}
 ggplot(key_counts %>% filter(m != "K10")) +
   geom_hline(yintercept = 5) +
   geom_point(aes(m, n_key_topics, col = alpha, size = n)) +
   scale_color_viridis_c() +
   scale_size(range = c(0, 3)) +
-  facet_wrap(~ alpha, ncol = 6)
-ggsave("~/Desktop/gradient_key_topics.png", dpi = 1000)
+  facet_grid(method ~ alpha)
+#ggsave("~/Desktop/gradient_key_topics.png", dpi = 1000)
 ```
 
 ```{r}
@@ -197,30 +212,86 @@ refinement <- read_and_process("refinement*", c("file"), gradient_dir) %>%
   mutate(across(alpha:V, as.numeric))
 ```
 
-```{r}
-refinement
-```
-
 ```{r, fig.height = 3, fig.width = 5}
 ggplot(refinement %>% filter(m != "K10")) +
   geom_point(
-    aes(m, refinement_score, col = alpha), 
+    aes(m, refinement_score, col = alpha),
     position = position_jitter(w = 0.1),
     alpha = 0.1, size = 0.2
   ) +
   scale_color_viridis_c() +
-  scale_y_log10()
+  scale_y_log10() +
+  facet_wrap(~ method)
 ```
-```{r, fig.height = 2, fig.width = 5}
+```{r, fig.height = 3.5, fig.width = 11}
 ggplot(refinement %>% filter(m != "K10")) +
   geom_violin(
     aes(m, refinement_score, fill = alpha)
   ) +
-  facet_wrap(~ alpha, ncol = 6) +
+  facet_grid(method ~ alpha) +
   scale_fill_viridis_c() +
   labs(y = "Refinement", x = "m", fill = expression(alpha)) +
   scale_y_log10() +
   theme(axis.text.x = element_text(size = 6))
-ggsave("~/Desktop/gradient_refinement.png", dpi = 1000)
+#ggsave("~/Desktop/gradient_refinement_full.png", dpi = 1000)
 ```
 
+### Functional Equivalence
+
+```{r}
+equiv_dir <- file.path(params$results, "equivalence")
+similarities <- read_and_process("*similarities*", c("rep", "S"), equiv_dir)
+```
+
+```{r, fig.width = 6, fig.height = 4}
+exper <- get(load(file.path(equiv_dir, "exper-transport_190_4_250_1000_5.rda")))
+sim_data <- exper[[1]]
+fit <- exper[[2]]
+plot(fit) +
+  labs(x = "K Topics") +
+  theme(axis.text.y = element_blank())
+#ggsave("~/Desktop/equivalence_flow.png", dpi = 1000)
+```
+
+```{r, fig.height = 9, fig.width = 14}
+png("~/Desktop/equivalence_betas.png", height = 2200, width = 7000)
+plot_beta(fit, c("K5", "K6", "K7"), pretty.order.rows = TRUE, legend = FALSE, bottom.label.text.size = 100, left.label.text.size = 70, yr.axis.name.size = 90, yr.axis.size = 100)
+#plot_beta(fit, c("K5", "K6", "K7"), pretty.order.rows = TRUE, legend = FALSE, min_beta = 0.02)
+dev.off()
+```
+
+```{r, fig.height = 2, fig.width = 8}
+model_sims <- similarities %>%
+  filter(
+    file == "similarities-product_190_18_250_1000_5.csv",
+    m %in% c("K4", "K5", "K6", "K7", "K8")
+    ) %>%
+  group_by(m) %>%
+  mutate(k_LDA = as.factor(row_number())) %>%
+  pivot_longer(V1:V7, names_to = "truth", values_to = "similarity")
+ggplot(model_sims) +
+  geom_tile(
+    aes(k_LDA, truth, fill = similarity)
+  ) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  facet_grid(~ m, scale = "free_x", space = "free") +
+  scale_fill_distiller(direction = 1)
+```
+
+```{r, fig.width = 10, fig.height = 4}
+diffs <- similarities %>%
+  separate(file, c("method", "S", "id", "N", "V", "K"), "_", remove = FALSE) %>%
+  mutate(
+    D1 = V1 - V2, D2 = V3 - V4,
+    S = as.integer(S)
+  )
+ggplot(diffs) +
+  geom_point(
+   aes(m, D1),
+   position = position_jitter(w = 0.1),
+   alpha = 0.6, size = 0.5
+  ) +
+  facet_grid(method ~ S)
+#ggsave("~/Desktop/equivalence_similarities.png", dpi = 1000)
+```
