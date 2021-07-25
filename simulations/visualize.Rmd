@@ -267,12 +267,15 @@ model_sims <- similarities %>%
     m %in% c("K4", "K5", "K6", "K7", "K8")
     ) %>%
   group_by(m) %>%
-  mutate(k_LDA = as.factor(row_number())) %>%
-  pivot_longer(V1:V7, names_to = "truth", values_to = "similarity")
-ggplot(model_sims) +
-  geom_tile(
-    aes(k_LDA, truth, fill = similarity)
-  ) +
+  group_by(m) %>%
+  mutate(
+    k_LDA = as.factor(row_number()),
+    m = factor(m, levels = rev(levels(m)))
+  ) %>%
+  pivot_longer(starts_with(".."), names_to = "truth", values_to = "similarity")
+
+ggplot(subset_sims) +
+  geom_tile(aes(k_LDA, truth, fill = similarity)) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
   facet_grid(~ m, scale = "free_x", space = "free") +
