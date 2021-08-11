@@ -72,6 +72,34 @@ read_and_process <- function(pattern, grouping, directory, max_K=10) {
 ```
 
 ```{r}
+#paths <- list.files("results/lda", "exper*", full = TRUE)
+
+read_betas <- function(paths) {
+  betas <- list()
+  beta_hats <- list()
+  for (i in seq_along(paths)) {
+    exper <- get(load(paths[i]))
+    beta_hats[[i]] <- map_dfr(model(exper[[2]]), ~ .$beta, .id = "m") %>%
+      mutate(sim = i)
+    betas[[i]] <- map_dfr(exper[[1]]$beta, ~ .$beta, .id = "m") %>%
+      mutate(sim = i)
+  }
+  
+  list(
+    beta_hats = bind_rows(beta_hats),
+    betas = bind_rows(betas)
+  )
+}
+
+
+estimate_similarities <- function(betas, beta_hats) {
+  # for each simulation replicate
+  # for each estimated beta_hat among the fitted models
+  max_sim <- apply(betas[[i]] %*% t(beta_hats[[i]]), 1, max)
+}
+```
+
+```{r}
 stability <- read_and_process("stability*", c("id", "branch", "method"), lda_dir)
 ```
 
