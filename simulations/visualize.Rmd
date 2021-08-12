@@ -29,29 +29,29 @@ https://uwmadison.box.com/shared/static/accan0ji43d7l97bia2fa9ai5zu826xm.gz
 
 First, we plot a random flow.
 
-```{r, fig.height = 3, fig.width = 5}
+```{r, fig.height = "5in", fig.width = "3in"}
 lda_dir <- file.path(params$results_dir, "lda")
 fits <- list(
-  get(load(file.path(lda_dir, "exper-product_2_250_1000_5.rda")))[2],
-  get(load(file.path(lda_dir, "exper-transport_2_250_1000_5.rda")))[2]
+  get(load(file.path(lda_dir, "exper-product_2_250_1000_5.rda")))[4],
+  get(load(file.path(lda_dir, "exper-transport_2_250_1000_5.rda")))[4]
 )
 plot(fits[[1]][[1]]) +
   labs(x = "K Topics") +
   theme(axis.text.y = element_blank())
-ggsave("~/Downloads/product-true-lda.png", dpi=500)
+ggsave("~/Downloads/product-true-lda.png", dpi=500, height = unit(3, "in"), width = unit(5, "in"))
 plot(fits[[2]][[1]]) +
   labs(x = "K Topics") +
   theme(axis.text.y = element_blank())
-ggsave("~/Downloads/transport-true-lda.png", dpi=500)
+ggsave("~/Downloads/transport-true-lda.png", dpi=500, height = unit(3, "in"), width = unit(5, "in"))
 ```
 
-```{r, fig.height = 4, fig.width = 6}
-png("~/Downloads/product-true-lda-betas.png", width = 1000, height = 500)
-plot_beta(fits[[1]][[1]], models = 2:10, legend = FALSE, bottom.label.text.size = 14, left.label.text.size = 8, yr.axis.name.size = 14, yr.axis.size = 12)
-dev.off()
-png("~/Downloads/transport-true-lda-betas.png", width = 1000, height = 500)
-plot_beta(fits[[2]][[1]], models = 2:10, legend = FALSE, bottom.label.text.size = 14, left.label.text.size = 8, yr.axis.name.size = 14, yr.axis.size = 12)
-dev.off()
+```{r, fig.height = "4in", fig.width = "6in"}
+plot_beta(fits[[1]][[1]], models = 2:10, n_features=25) +
+  scale_size(range = c(0, 7))
+ggsave("~/Downloads/product-true-lda-betas.png", dpi = 500)
+plot_beta(fits[[2]][[1]], models = 2:10, n_features=25) +
+  scale_size(range = c(0, 7))
+ggsave("~/Downloads/transport-true-lda-betas.png", dpi = 500)
 ```
 
 
@@ -72,8 +72,6 @@ read_and_process <- function(pattern, grouping, directory, max_K=10) {
 ```
 
 ```{r}
-#paths <- list.files("results/lda", "exper*", full = TRUE)
-
 read_betas <- function(paths) {
   betas <- list()
   beta_hats <- list()
@@ -100,33 +98,26 @@ estimate_similarities <- function(betas, beta_hats) {
 ```
 
 ```{r}
-stability <- read_and_process("stability*", c("id", "branch", "method"), lda_dir)
-```
-
-Notice there are few new branches that begin after K5, and those that do decay
-quite quickly.
-
-```{r, fig.width = 6, fig.height = 3}
-ggplot(stability) +
-  geom_line(aes(m, stability, group = group), alpha = 0.2, size = 0.2) +
-  facet_grid(. ~ method)
-```
-
-
-```{r, fig.width = 10, fig.height = 3}
-ggplot(stability %>% filter(id < 10)) +
-  geom_line(aes(m, stability, group = group), alpha = 0.4, size = 0.8) +
-  facet_wrap(~ id, ncol = 5)
+paths <- list.files(lda_dir, "exper*", full = TRUE)
+max_K <- 10
+measures <- map_dfr(
+  paths,
+  ~ topics(get(load(.))[[4]]),
+  .id = "file"
+) %>%
+  mutate(
+    m = factor(m, levels = str_c("K", 1:max_K)),
+    file = basename(paths[as.integer(file)]),
+    method = ifelse(grepl("product", file), "product", "transport")
+  )
 ```
 
 
 ```{r}
 key_topics <- read_and_process("key*", c("id"), file.path(params$results_dir, "lda"))
-ggplot(key_topics) +
-  geom_line(aes(x = m, y = n_key_topics, group = id), alpha = 0.6)
 ```
 
-```{r, fig.width = 5, fig.height = 3}
+```{r, fig.width = "5in", fig.height = "3in"}
 key_counts <- key_topics %>%
   group_by(m, method) %>%
   count(n_key_topics) %>%
@@ -140,51 +131,16 @@ ggplot(key_counts) +
 ggsave("~/Downloads/key_topics-lda.png", dpi=500)
 ```
 
-```{r, fig.width = 5, fig.height = 3}
-offset_up <- key_topics %>%
-  group_by(id) %>%
-  slice_max(n_topics, n = 8) %>%
-  arrange(id, n_topics) %>%
-  rename(m_next = m, n_key_topics_next = n_key_topics) %>%
-  ungroup() %>%
-  select(m_next, n_key_topics_next)
-
-offset_down <- key_topics %>%
-  group_by(id) %>%
-  slice_min(n_topics, n = 8) %>%
-  arrange(id, n_topics) %>%
-  ungroup()
-
-key_counts <- bind_cols(offset_down, offset_up) %>%
-  count(m, m_next, n_key_topics, n_key_topics_next)
-```
-
-```{r, fig.width = 5, fig.height = 3}
-ggplot(key_counts %>% filter(m_next != "K10")) +
-  geom_segment(aes(m, n_key_topics, xend = m_next, yend = n_key_topics_next, size = n, alpha = n)) +
-  geom_hline(yintercept = 5) +
-  scale_size(range = c(0.5, 2)) +
-  scale_alpha(range = c(0.2, 1))
-```
-
 ```{r}
-refinement <- read_and_process("*refinement*", c("id"), lda_dir)
-ggplot(refinement) +
-  geom_point(
-    aes(m, refinement_score),
-    position = position_jitter(w = 0.1),
-    alpha = 0.1, size = 0.2
-  ) +
-  scale_y_log10()
-```
-```{r}
-ggplot(refinement) +
+ggplot(measures %>% filter(!(m %in% c("K1", "K10")))) +
   geom_violin(
-    aes(m, refinement_score)
+    aes(m, refinement),
+    fill = "black",
+    bw = 0.05, size = 0
   ) +
   scale_y_log10() +
   labs(x = "K Topics", y = "refinement") +
-  facet_wrap(~ method, scale = "free_y")
+  facet_grid(. ~ method)
 ggsave("~/Downloads/refinement_lda.png", dpi=500)
 ```
 
@@ -192,30 +148,76 @@ ggsave("~/Downloads/refinement_lda.png", dpi=500)
 
 ```{r}
 gradient_dir <- file.path(params$results_dir, "gradient")
-stability <- read_and_process("stability*", c("branch", "file"), gradient_dir) %>%
-  separate(file, c("method", "alpha", "id", "N", "V", "K"), "_", remove = FALSE) %>%
+paths <- list.files(gradient_dir, "exper*", full = TRUE)
+max_K <- 10
+measures <- map_dfr(
+  paths,
+  ~ topics(get(load(.))[[2]]),
+  .id = "file"
+) %>%
   mutate(
-    across(alpha:K, as.numeric),
-    method = gsub("stability-", "", method)
-  ) 
+    m = factor(m, levels = str_c("K", 1:max_K)),
+    file = basename(paths[as.integer(file)]),
+    method = ifelse(grepl("product", file), "product", "transport")
+  ) %>%
+  separate(file, c("prefix", "alpha", "rep", "N", "D", "K"),  "_", remove = FALSE) %>%
+  mutate(alpha = as.numeric(alpha))
+  
+
+weights <- map_dfr(
+  paths,
+  ~ weights(get(load(.))[[2]]),
+  .id = "file"
+) %>%
+  mutate(
+    m = factor(m, levels = str_c("K", 1:max_K)),
+    file = basename(paths[as.integer(file)]),
+    method = ifelse(grepl("product", file), "product", "transport")
+  )
 ```
 
-```{r, fig.width = 8, fig.height = 3.5}
+```{r}
+weights_ <- weights %>%
+  mutate(
+    m_ix = as.integer(m),
+    m_next_ix = as.integer(m_next),
+  ) %>%
+  filter(m_next_ix == m_ix + 1) %>%
+  left_join(
+    measures %>% select(file, alpha, m, k, robustness),
+    by = c("file", "m", "k")
+  ) %>%
+  left_join(
+    measures %>% select(file, m, k, robustness) %>% rename(robustness_next = robustness),
+    by = c("file" = "file", "k_next" = "k", "m_next" = "m")
+  )
+```
+
+```{r}
 subset_alpha <-  c(0, 0.2, 0.4, 0.6, 0.8, 1)
-ggplot(stability %>% filter(alpha %in% subset_alpha)) +
-  geom_line(aes(m, stability, col = alpha, group = group), alpha = 0.2, size = 0.5) +
-  scale_color_viridis_c(breaks = c(0, 0.5, 1)) +
+ggplot(
+  weights_ %>% filter(alpha %in% subset_alpha),
+  aes(m_ix, robustness, color = alpha, size = weight, alpha = weight)
+  ) +
+  geom_point(position = position_jitter(w = 0.1)) +
+  geom_point(
+    data = weights_ %>% filter(alpha%in% subset_alpha, m_next_ix == 10),
+    aes(m_next_ix, robustness_next),
+    position = position_jitter(w = 0.1)
+  ) +
+  geom_segment(aes(xend = m_next_ix, yend = robustness_next)) +
+  scale_x_continuous(breaks = 1:10) +
+  scale_size(range = c(0.05, .3)) +
+  scale_alpha(range = c(0.01, 0.2)) +
+  scico::scale_color_scico(palette = "vikO", breaks = c(0, 0.5, 1)) +
   scale_y_continuous(breaks = c(0, 0.5, 1)) +
-  facet_grid(method ~ alpha) +
   labs(col = expression(alpha), x = "K Topics") +
+  guides(size = guide_legend(override.aes = list(alpha = 1))) +
+  facet_grid(method ~ alpha, scale = "free_y") +
   theme(axis.text.x = element_text(size = 6))
-ggsave("~/Downloads/gradient_stability.png", dpi = 500)
+ggsave("~/Downloads/gradient_stability.png", dpi = 500, width = unit(8.5, "in"), height = unit(3, "in"))
 ```
-```{r, fig.width = 5, fig.height = 3}
-ggplot(stability) +
-  geom_line(aes(m, stability, group = group, col = alpha), alpha = 0.2, size = 0.3) +
-  scale_color_viridis_c()
-```
+
 
 ```{r}
 key_topics <- read_and_process("key*", c("file"), gradient_dir) %>%
@@ -241,31 +243,23 @@ ggplot(key_counts) +
 ```
 
 
-```{r, fig.width = 8, fig.height = 4}
+```{r, fig.width = "8in", fig.height = "4in"}
 ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
   geom_hline(yintercept = 5) +
   geom_point(aes(m, n_key_topics, col = alpha, size = n)) +
-  scale_color_viridis_c(breaks = c(0, 0.5, 1)) +
+  scico::scale_color_scico(palette = "vikO", breaks = c(0, 0.5, 1)) +
   scale_size(range = c(0, 3)) +
-  labs(x = "Fitted Topics", y = "Key Topics", col = expression(alpha)) +
+  labs(x = "K Topics", y = "Key Topics", col = expression(alpha)) +
   facet_grid(method ~ alpha) +
   theme(axis.text.x = element_text(size = 7))
 ggsave("~/Downloads/gradient_key_topics.png", dpi = 500)
 ```
 
-```{r}
-refinement <- read_and_process("refinement*", c("file"), gradient_dir) %>%
-  separate(file, c("method", "alpha", "id", "N", "V", "K"), "_", remove = FALSE) %>%
-  mutate(
-    across(alpha:V, as.numeric),
-    method = gsub("refinement-", "", method)
-  )
-```
 
 ```{r, fig.height = 3, fig.width = 5}
-ggplot(refinement %>% filter(m != "K10")) +
+ggplot(measures %>% filter(m != "K10")) +
   geom_point(
-    aes(m, refinement_score, col = alpha),
+    aes(m, refinement, col = alpha),
     position = position_jitter(w = 0.1),
     alpha = 0.1, size = 0.2
   ) +
@@ -274,13 +268,14 @@ ggplot(refinement %>% filter(m != "K10")) +
   facet_wrap(~ method)
 ```
 
-```{r, fig.height = 3.5, fig.width = 8}
-ggplot(refinement %>% filter(m != "K10", alpha %in% subset_alpha)) +
+```{r, fig.height = "3.5in", fig.width = "8in"}
+ggplot(measures %>% filter(m != "K10", alpha %in% subset_alpha)) +
   geom_violin(
-    aes(m, refinement_score, fill = alpha)
+    aes(m, refinement, fill = alpha),
+    bw = 0.05, size = 0
   ) +
   facet_grid(method ~ alpha) +
-  scale_fill_viridis_c(breaks = c(0, 0.5, 1)) +
+  scico::scale_fill_scico(palette = "vikO", breaks = c(0, 0.5, 1)) +
   labs(y = "Refinement", x = "K Topics", fill = expression(alpha)) +
   scale_y_log10() +
   theme(axis.text.x = element_text(size = 6))
@@ -296,7 +291,6 @@ for (s in seq_along(paths)) {
 }
 ```
 
-
 ### Functional Equivalence
 
 ```{r}
@@ -304,28 +298,34 @@ equiv_dir <- file.path(params$results, "equivalence")
 similarities <- read_and_process("*similarities*", c("rep", "S"), equiv_dir)
 ```
 
-```{r, fig.width = 6, fig.height = 4}
+```{r, fig.width = "1in", fig.height = "5in"}
 exper <- get(load(file.path(equiv_dir, "exper-transport_230_12_250_1000_5.rda")))
 sim_data <- exper[[1]]
 fit <- exper[[2]]
 plot(fit) +
   labs(x = "K Topics") +
   theme(axis.text.y = element_blank())
-ggsave("~/Downloads/equivalence_flow.png", dpi = 500)
+ggsave("~/Downloads/equivalence_flow.png", dpi = 750)
 ```
 
-```{r, fig.height = 9, fig.width = 14}
-png("~/Downloads/equivalence_betas.png", width = 1000, height = 500)
-#plot_beta(fit, models = c("K5", "K6", "K7"), legend = FALSE, bottom.label.text.size = 14, left.label.text.size = 12, yr.axis.name.size = 14, yr.axis.size = 12)
-plot_beta(fit, models = c("K5", "K6", "K7"), legend = FALSE, bottom.label.text.size = 14, left.label.text.size = 12, yr.axis.name.size = 14, yr.axis.size = 12)
-dev.off()
+```{r, fig.height = 2, fig.width = 6}
+plot_beta(fit, models = c("K5", "K6", "K7"), n_features = 200) +
+  theme(
+    axis.text = element_text(size = 10),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    strip.text = element_text(size = 12)
+  ) +
+  scale_size(range = c(0, 35), limits = c(0, 1))
+ggsave("~/Downloads/equivalence_betas.png", dpi=750)
 ```
 
-```{r, fig.height = 3, fig.width = 8}
+```{r, fig.height = "3in", fig.width = "4in"}
 model_sims <- similarities %>%
   filter(
     file == "similarities-transport_230_12_250_1000_5.csv",
-    m %in% str_c("K", 4:8)
+    m %in% str_c("K", 5:7)
   ) %>%
   group_by(m) %>%
   mutate(
@@ -341,10 +341,10 @@ ggplot(model_sims) +
   facet_grid(~ m, scale = "free_x", space = "free") +
   labs(x = "Fitted Topic", y = "True Topic") +
   scico::scale_fill_scico(palette = "nuuk")
-ggsave("~/Downloads/equivalence_similarity_hm.png", dpi=500)
+ggsave("~/Downloads/equivalence_similarity_hm.png", dpi=500, width = unit(7, "in"), height = unit(4, "in"))
 ```
 
-```{r, fig.width = 10, fig.height = 4}
+```{r, fig.width = "10in", fig.height = "4in"}
 diffs <- similarities %>%
   separate(file, c("method", "S", "id", "N", "V", "K"), "_", remove = FALSE) %>%
   mutate(
