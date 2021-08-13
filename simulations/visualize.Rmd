@@ -18,7 +18,8 @@ library(tibble)
 library(purrr)
 library(stringr)
 library(tidyr)
-source("https://raw.githubusercontent.com/krisrs1128/topic_align/main/simulations/simulation_functions.R")
+source("simulation_functions.R")
+source("visualization_functions.R")
 my_theme()
 ```
 
@@ -29,7 +30,7 @@ https://uwmadison.box.com/shared/static/accan0ji43d7l97bia2fa9ai5zu826xm.gz
 
 First, we plot a random flow.
 
-```{r, fig.height = "5in", fig.width = "3in"}
+```{r}
 lda_dir <- file.path(params$results_dir, "lda")
 fits <- list(
   get(load(file.path(lda_dir, "exper-product_2_250_1000_5.rda")))[4],
@@ -45,7 +46,7 @@ plot(fits[[2]][[1]]) +
 ggsave("~/Downloads/transport-true-lda.png", dpi=500, height = unit(3, "in"), width = unit(5, "in"))
 ```
 
-```{r, fig.height = "4in", fig.width = "6in"}
+```{r}
 plot_beta(fits[[1]][[1]], models = 2:10, n_features=25) +
   scale_size(range = c(0, 7))
 ggsave("~/Downloads/product-true-lda-betas.png", dpi = 500)
@@ -58,47 +59,10 @@ ggsave("~/Downloads/transport-true-lda-betas.png", dpi = 500)
 Now, we plot the stability curves.
 
 ```{r}
-read_and_process <- function(pattern, grouping, directory, max_K=10) {
-  paths <- list.files(directory, pattern, full = TRUE)
-  map_dfr(paths, read_csv, .id = "file") %>%
-    suppressMessages() %>%
-    mutate(
-      m = factor(m, levels = str_c("K", 1:max_K)),
-      file = basename(paths[as.integer(file)]),
-      method = ifelse(grepl("product", file), "product", "transport")
-    ) %>%
-    unite("group", grouping, remove = FALSE)
-}
-```
-
-```{r}
-read_betas <- function(paths) {
-  betas <- list()
-  beta_hats <- list()
-  for (i in seq_along(paths)) {
-    exper <- get(load(paths[i]))
-    beta_hats[[i]] <- map_dfr(model(exper[[2]]), ~ .$beta, .id = "m") %>%
-      mutate(sim = i)
-    betas[[i]] <- map_dfr(exper[[1]]$beta, ~ .$beta, .id = "m") %>%
-      mutate(sim = i)
-  }
-  
-  list(
-    beta_hats = bind_rows(beta_hats),
-    betas = bind_rows(betas)
-  )
-}
-
-
-estimate_similarities <- function(betas, beta_hats) {
-  # for each simulation replicate
-  # for each estimated beta_hat among the fitted models
-  max_sim <- apply(betas[[i]] %*% t(beta_hats[[i]]), 1, max)
-}
-```
-
-```{r}
 paths <- list.files(lda_dir, "exper*", full = TRUE)
+```
+
+```{r}
 max_K <- 10
 measures <- map_dfr(
   paths,
@@ -110,14 +74,23 @@ measures <- map_dfr(
     file = basename(paths[as.integer(file)]),
     method = ifelse(grepl("product", file), "product", "transport")
   )
+
+betas <- read_betas(paths)
+similarity <- topic_cossim(betas$betas, betas$beta_hats) %>%
+  mutate(
+    m = factor(m, levels = levels(measures$m))
+  )
+
+measures <- measures %>%
+  left_join(similarity) %>%
+  mutate(high_sim = sim > 0.95)
+rm(similarity)
 ```
-
-
 ```{r}
 key_topics <- read_and_process("key*", c("id"), file.path(params$results_dir, "lda"))
 ```
 
-```{r, fig.width = "5in", fig.height = "3in"}
+```{r}
 key_counts <- key_topics %>%
   group_by(m, method) %>%
   count(n_key_topics) %>%
@@ -133,17 +106,17 @@ ggsave("~/Downloads/key_topics-lda.png", dpi=500)
 
 ```{r}
 ggplot(measures %>% filter(!(m %in% c("K1", "K10")))) +
-  geom_violin(
-    aes(m, refinement),
-    fill = "black",
-    bw = 0.05, size = 0
+  geom_split_violin(
+    aes(m, refinement, fill = high_sim),
+    bw = 0.04, size = 0.0,
   ) +
+  scale_fill_manual(values = c("#913551", "#71aaa4")) +
   scale_y_log10() +
   labs(x = "K Topics", y = "refinement") +
-  facet_grid(. ~ method)
-ggsave("~/Downloads/refinement_lda.png", dpi=500)
+  facet_grid( ~ method) +
+  theme(legend.position = "none")
+ggsave("~/Downloads/refinement_lda.png", dpi=500, width = unit(5, "cm"), height = unit(3, "cm"))
 ```
-
 #### Gradient Experiment
 
 ```{r}
@@ -157,69 +130,42 @@ measures <- map_dfr(
 ) %>%
   mutate(
     m = factor(m, levels = str_c("K", 1:max_K)),
+    m_ix = as.numeric(str_extract(m, "[0-9]+")),
     file = basename(paths[as.integer(file)]),
     method = ifelse(grepl("product", file), "product", "transport")
   ) %>%
   separate(file, c("prefix", "alpha", "rep", "N", "D", "K"),  "_", remove = FALSE) %>%
   mutate(alpha = as.numeric(alpha))
-  
 
-weights <- map_dfr(
-  paths,
-  ~ weights(get(load(.))[[2]]),
-  .id = "file"
-) %>%
-  mutate(
-    m = factor(m, levels = str_c("K", 1:max_K)),
-    file = basename(paths[as.integer(file)]),
-    method = ifelse(grepl("product", file), "product", "transport")
-  )
-```
+betas <- read_betas(paths, c(2, 1), "topics")
+similarity <- topic_cossim(betas$betas, betas$beta_hats) %>%
+  mutate(m = factor(m, levels = levels(measures$m)))
 
-```{r}
-weights_ <- weights %>%
-  mutate(
-    m_ix = as.integer(m),
-    m_next_ix = as.integer(m_next),
-  ) %>%
-  filter(m_next_ix == m_ix + 1) %>%
-  left_join(
-    measures %>% select(file, alpha, m, k, robustness),
-    by = c("file", "m", "k")
-  ) %>%
-  left_join(
-    measures %>% select(file, m, k, robustness) %>% rename(robustness_next = robustness),
-    by = c("file" = "file", "k_next" = "k", "m_next" = "m")
-  )
+measures <- measures %>%
+  left_join(similarity) %>%
+  mutate(high_sim = sim > 0.95)
+rm(similarity)
 ```
 
 ```{r}
 subset_alpha <-  c(0, 0.2, 0.4, 0.6, 0.8, 1)
 ggplot(
-  weights_ %>% filter(alpha %in% subset_alpha),
-  aes(m_ix, robustness, color = alpha)
+  measures %>% filter(alpha %in% subset_alpha),
+  aes(m_ix, robustness)
   ) +
+  geom_smooth(size = .5, alpha = 1, col = "darkgrey", se = FALSE) +
   geom_point(
     size = 0.05, alpha = 0.1 ,
     position = position_jitter(w = 0.15)
     ) +
-  geom_point(
-    data = weights_ %>% filter(alpha%in% subset_alpha, m_next_ix == 10),
-    aes(m_next_ix, robustness_next),
-    position = position_jitter(w = 0.15),
-    size = 0.05, alpha = 0.1
-  ) +
-  scale_x_continuous(breaks = 1:10) +
-  scico::scale_color_scico(palette = "vikO", breaks = c(0, 0.5, 1)) +
   scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1)) +
-  labs(col = expression(alpha), x = "K Topics") +
-  guides(size = guide_legend(override.aes = list(alpha = 1))) +
+  labs(x = "K Topics", y = "Coherence") +
   facet_grid(method ~ alpha, scale = "free_y") +
   theme(
     axis.text.x = element_text(size = 6),
     panel.grid.major.x = element_blank()
   )
-ggsave("~/Downloads/gradient_stability.png", dpi = 1000, width = unit(8.5, "in"), height = unit(4, "in"))
+#ggsave("~/Downloads/gradient_stability.png", dpi = 1000, width = unit(8.5, "in"), height = unit(4, "in"))
 ```
 
 
@@ -229,18 +175,17 @@ key_topics <- read_and_process("key*", c("file"), gradient_dir) %>%
   mutate(across(alpha:V, as.numeric))
 ```
 
-```{r, fig.width = 5, fig.height = 3}
+```{r}
 key_counts <- key_topics %>%
   group_by(m, alpha, method) %>%
   count(n_key_topics) %>%
   mutate(method = gsub("topics-", "", method))
 ```
 
-```{r, fig.width = "8in", fig.height = "4in"}
+```{r}
 ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
   geom_hline(yintercept = 5) +
-  geom_point(aes(m, n_key_topics, col = alpha, size = n)) +
-  scico::scale_color_scico(palette = "vikO", breaks = c(0, 0.5, 1)) +
+  geom_point(aes(m, n_key_topics, size = n)) +
   scale_size(range = c(0, 3)) +
   labs(x = "K Topics", y = "Key Topics", col = expression(alpha)) +
   facet_grid(method ~ alpha) +
@@ -249,18 +194,18 @@ ggsave("~/Downloads/gradient_key_topics.png", dpi = 500)
 ```
 
 
-```{r, fig.height = "3.5in", fig.width = "8in"}
-ggplot(measures %>% filter(m != "K10", alpha %in% subset_alpha)) +
-  geom_violin(
-    aes(m, refinement, fill = alpha),
-    bw = 0.05, size = 0
+```{r}
+ggplot(measures %>% filter(alpha %in% subset_alpha)) +
+  geom_split_violin(
+    aes(m, refinement, fill = high_sim),
+    bw = 0.04, size = 0
   ) +
   facet_grid(method ~ alpha) +
-  scico::scale_fill_scico(palette = "vikO", breaks = c(0, 0.5, 1)) +
-  labs(y = "Refinement", x = "K Topics", fill = expression(alpha)) +
+  scale_fill_manual(values = c("#913551", "#71aaa4")) +
+  labs(y = "Refinement", x = "K Topics", fill = "Similarity > 0.95") +
   scale_y_log10() +
   theme(axis.text.x = element_text(size = 6))
-ggsave("~/Downloads/gradient_refinement_full.png", dpi = 500)
+#ggsave("~/Downloads/gradient_refinement_full.png", dpi = 500)
 ```
 
 ```{r, fig.height = 3, fig.width = 5}
@@ -279,7 +224,7 @@ equiv_dir <- file.path(params$results, "equivalence")
 similarities <- read_and_process("*similarities*", c("rep", "S"), equiv_dir)
 ```
 
-```{r, fig.width = "1in", fig.height = "5in"}
+```{r}
 exper <- get(load(file.path(equiv_dir, "exper-transport_230_12_250_1000_5.rda")))
 sim_data <- exper[[1]]
 fit <- exper[[2]]
@@ -302,7 +247,7 @@ plot_beta(fit, models = c("K5", "K6", "K7"), n_features = 200) +
 ggsave("~/Downloads/equivalence_betas.png", dpi=750)
 ```
 
-```{r, fig.height = "3in", fig.width = "4in"}
+```{r}
 model_sims <- similarities %>%
   filter(
     file == "similarities-transport_230_12_250_1000_5.csv",
@@ -325,7 +270,7 @@ ggplot(model_sims) +
 ggsave("~/Downloads/equivalence_similarity_hm.png", dpi=500, width = unit(7, "in"), height = unit(4, "in"))
 ```
 
-```{r, fig.width = "10in", fig.height = "4in"}
+```{r}
 diffs <- similarities %>%
   separate(file, c("method", "S", "id", "N", "V", "K"), "_", remove = FALSE) %>%
   mutate(
