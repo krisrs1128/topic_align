@@ -197,25 +197,29 @@ weights_ <- weights %>%
 subset_alpha <-  c(0, 0.2, 0.4, 0.6, 0.8, 1)
 ggplot(
   weights_ %>% filter(alpha %in% subset_alpha),
-  aes(m_ix, robustness, color = alpha, size = weight, alpha = weight)
+  aes(m_ix, robustness, color = alpha)
   ) +
-  geom_point(position = position_jitter(w = 0.1)) +
+  geom_point(
+    size = 0.05, alpha = 0.1 ,
+    position = position_jitter(w = 0.15)
+    ) +
   geom_point(
     data = weights_ %>% filter(alpha%in% subset_alpha, m_next_ix == 10),
     aes(m_next_ix, robustness_next),
-    position = position_jitter(w = 0.1)
+    position = position_jitter(w = 0.15),
+    size = 0.05, alpha = 0.1
   ) +
-  geom_segment(aes(xend = m_next_ix, yend = robustness_next)) +
   scale_x_continuous(breaks = 1:10) +
-  scale_size(range = c(0.05, .3)) +
-  scale_alpha(range = c(0.01, 0.2)) +
   scico::scale_color_scico(palette = "vikO", breaks = c(0, 0.5, 1)) +
-  scale_y_continuous(breaks = c(0, 0.5, 1)) +
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1)) +
   labs(col = expression(alpha), x = "K Topics") +
   guides(size = guide_legend(override.aes = list(alpha = 1))) +
   facet_grid(method ~ alpha, scale = "free_y") +
-  theme(axis.text.x = element_text(size = 6))
-ggsave("~/Downloads/gradient_stability.png", dpi = 500, width = unit(8.5, "in"), height = unit(3, "in"))
+  theme(
+    axis.text.x = element_text(size = 6),
+    panel.grid.major.x = element_blank()
+  )
+ggsave("~/Downloads/gradient_stability.png", dpi = 1000, width = unit(8.5, "in"), height = unit(4, "in"))
 ```
 
 
@@ -230,18 +234,7 @@ key_counts <- key_topics %>%
   group_by(m, alpha, method) %>%
   count(n_key_topics) %>%
   mutate(method = gsub("topics-", "", method))
-
-ggplot(key_counts) +
-  geom_hline(yintercept = 5) +
-  geom_point(
-    aes(m, n_key_topics, col = alpha, size = n),
-    alpha = 0.4, position = position_jitter(w = 0.1, h = 0.1)
-  ) +
-  scale_size(range = c(0, 3)) +
-  scale_color_viridis_c() +
-  facet_wrap(~ method)
 ```
-
 
 ```{r, fig.width = "8in", fig.height = "4in"}
 ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
@@ -255,18 +248,6 @@ ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
 ggsave("~/Downloads/gradient_key_topics.png", dpi = 500)
 ```
 
-
-```{r, fig.height = 3, fig.width = 5}
-ggplot(measures %>% filter(m != "K10")) +
-  geom_point(
-    aes(m, refinement, col = alpha),
-    position = position_jitter(w = 0.1),
-    alpha = 0.1, size = 0.2
-  ) +
-  scale_color_viridis_c() +
-  scale_y_log10() +
-  facet_wrap(~ method)
-```
 
 ```{r, fig.height = "3.5in", fig.width = "8in"}
 ggplot(measures %>% filter(m != "K10", alpha %in% subset_alpha)) +
