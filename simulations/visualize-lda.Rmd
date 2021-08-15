@@ -1,0 +1,173 @@
+---
+title: "Visualize LDA Simulation Results"
+output: html_notebook
+params:
+    results_dir: "results/"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
+```
+
+```{r}
+library(alto)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tibble)
+library(purrr)
+library(stringr)
+library(tidyr)
+source("simulation_functions.R")
+source("visualization_functions.R")
+my_theme()
+```
+
+The simulation results we're working with are saved
+[here](https://uwmadison.box.com/shared/static/accan0ji43d7l97bia2fa9ai5zu826xm.gz).
+If we download that file, unzip it, and unzip all its contents, we should see
+the directories and files that are referred to in this rmarkdown. Specifically,
+we could run,
+```
+curl -L https://uwmadison.box.com/shared/static/accan0ji43d7l97bia2fa9ai5zu826xm.gz > results.tar.gz
+tar -zxvf results.gz
+cd results # set this to results_dir in the rmarkdown YAML
+for f in $(ls *.tar.gz); do tar -zxvf $f; done
+```
+in our terminal.
+
+### True LDA Experiment
+
+First, we plot a random flow.
+
+```{r}
+lda_dir <- file.path(params$results_dir, "lda")
+fits <- list(
+  get(load(file.path(lda_dir, "exper-product_2_250_1000_5.rda")))[4],
+  get(load(file.path(lda_dir, "exper-transport_2_250_1000_5.rda")))[4]
+)
+plot(fits[[1]][[1]]) +
+  labs(x = "K Topics") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.text.x = element_text(size = 10),
+    axis.title.x = element_text(size = 16)
+    )
+ggsave("~/Downloads/product-true-lda.png", dpi=500, height = unit(3, "in"), width = unit(4, "in"))
+plot(fits[[2]][[1]]) +
+  labs(x = "K Topics") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.text.x = element_text(size = 10),
+    axis.title.x = element_text(size = 16)
+  )
+ggsave("~/Downloads/transport-true-lda.png", dpi=500, height = unit(3, "in"), width = unit(4, "in"))
+```
+
+Next, we can plot the topic weights associated with this alignment.
+
+```{r}
+plot_beta(fits[[1]][[1]], models = 2:10, n_features=25) +
+  scale_size(range = c(0, 7))
+ggsave("~/Downloads/product-true-lda-betas.png", dpi = 500)
+plot_beta(fits[[2]][[1]], models = 2:10, n_features=25) +
+  scale_size(range = c(0, 7))
+ggsave("~/Downloads/transport-true-lda-betas.png", dpi = 500)
+```
+
+Before plotting the measures associated with the alignments, we compute the
+cosine similarity between the true underlying topics and the topics estimated
+across the LDA model ensemble.
+
+```{r}
+paths <- list.files(lda_dir, "exper*", full = TRUE)
+max_K <- 10
+
+# topic quality measures
+measures <- map_dfr(
+  paths,
+  ~ topics(get(load(.))[[4]]),
+  .id = "file"
+) %>%
+  mutate(
+    m = factor(m, levels = str_c("K", 1:max_K)),
+    file = basename(paths[as.integer(file)]),
+    method = ifelse(grepl("product", file), "product", "transport")
+  )
+
+# true vs. estimated topics
+betas <- read_betas(paths)
+similarity <- topic_cossim(betas$betas, betas$beta_hats) %>%
+  mutate(
+    m = factor(m, levels = levels(measures$m))
+  )
+```
+
+We join this similarity information into the topic quality measures in the block
+below.
+
+```{r}
+measures <- measures %>%
+  left_join(similarity) %>%
+  mutate(high_sim = ifelse(sim > 0.95, "Yes", "No"))
+rm(similarity)
+```
+
+Our final measure of interest is the number of key topics.
+
+```{r}
+key_topics <- read_and_process("key*", c("id"), file.path(params$results_dir, "lda"))
+```
+
+```{r}
+key_counts <- key_topics %>%
+  group_by(m, method) %>%
+  count(n_key_topics) %>%
+  filter(m != "K10")
+
+ggplot(key_counts) +
+  geom_hline(yintercept = 5) +
+  geom_point(aes(x = m, y = n_key_topics, size = n)) +
+  labs(
+    x = "K Topics", 
+    y = "Key Topics",
+    size = "N Simulations"
+  ) +
+  facet_wrap(~ method) +
+  theme(
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 16),
+    strip.text = element_text(size = 16)
+  )
+ggsave("~/Downloads/key_topics-lda.png", dpi=500)
+```
+
+```{r}
+ggplot(measures %>% filter(!(m %in% c("K1", "K10")))) +
+  geom_point(
+    aes(m, refinement, col = sim),
+    size = .1,
+    position = position_jitter(w = 0.4)
+  ) +
+  scale_colour_stepsn(
+    breaks = c(0.35, 0.7, 0.9, 0.95),
+    colors = c("#662539", "#913551", "#c66281", "#c0d9e5", "#96bfd4", "#478bae"),
+    values = c(0, 0.35, 0.7, 0.9, 0.95, 1)
+  ) +
+  scale_y_log10() +
+  labs(
+    x = "K Topics", 
+    y = "Refinement",
+    col = expression(paste("cossim(", beta[k], ", ", hat(beta)[k], ")"))
+  ) +
+  facet_grid( ~ method) +
+  theme(
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 16),
+    strip.text = element_text(size = 16),
+    legend.title = element_text(size = 14),
+    legend.key.width = unit(1.2, "cm"),
+    legend.text = element_text(size = 10)
+  )
+ggsave("~/Downloads/refinement_lda.png", dpi=500, width = unit(9, "cm"), height = unit(5, "cm"))
+```
