@@ -1,0 +1,169 @@
+---
+title: "Visualize LDA with Background Noise"
+output: html_notebook
+params:
+    results_dir: "results/"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2)
+```
+
+```{r}
+library(alto)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tibble)
+library(purrr)
+library(stringr)
+library(tidyr)
+source("simulation_functions.R")
+source("visualization_functions.R")
+my_theme()
+```
+
+The simulation results we're working with are saved
+[here](https://uwmadison.box.com/shared/static/accan0ji43d7l97bia2fa9ai5zu826xm.gz).
+If we download that file, unzip it, and unzip all its contents, we should see
+the directories and files that are referred to in this rmarkdown. Specifically,
+we could run,
+```
+curl -L https://uwmadison.box.com/shared/static/accan0ji43d7l97bia2fa9ai5zu826xm.gz > results.tar.gz
+tar -zxvf results.gz
+cd results # set this to results_dir in the rmarkdown YAML
+for f in $(ls *.tar.gz); do tar -zxvf $f; done
+```
+in our terminal.
+
+### Gradient Experiment
+
+```{r}
+gradient_dir <- file.path(params$results_dir, "gradient")
+paths <- list.files(gradient_dir, "exper*", full = TRUE)
+max_K <- 10
+measures <- map_dfr(
+  paths,
+  ~ topics(get(load(.))[[2]]),
+  .id = "file"
+) %>%
+  mutate(
+    m = factor(m, levels = str_c("K", 1:max_K)),
+    m_ix = as.numeric(str_extract(m, "[0-9]+")),
+    file = basename(paths[as.integer(file)]),
+    method = ifelse(grepl("product", file), "product", "transport")
+  ) %>%
+  separate(file, c("prefix", "alpha", "rep", "N", "D", "K"),  "_", remove = FALSE) %>%
+  mutate(alpha = as.numeric(alpha))
+
+betas <- read_betas(paths, c(2, 1), "topics")
+similarity <- topic_cossim(betas$betas, betas$beta_hats) %>%
+  mutate(m = factor(m, levels = levels(measures$m)))
+
+measures <- measures %>%
+  left_join(similarity) %>%
+  mutate(high_sim = ifelse(sim > 0.95, "Yes", "No"))
+rm(similarity)
+```
+
+```{r}
+subset_alpha <-  c(0, 0.2, 0.4, 0.6, 0.8, 1)
+ggplot(
+  measures %>% filter(alpha %in% subset_alpha),
+  aes(m_ix, robustness)
+  ) +
+  geom_smooth(size = .5, alpha = 1, col = "darkgrey", se = FALSE) +
+  geom_point(
+    size = 0.05, alpha = 0.1 ,
+    position = position_jitter(w = 0.15)
+    ) +
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1)) +
+  labs(x = "K Topics", y = "Coherence") +
+  facet_grid(method ~ alpha, scale = "free_y") +
+  theme(
+    strip.text = element_text(size = 15),
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 10),
+    axis.title = element_text(size = 15),
+    panel.grid.major.x = element_blank()
+  )
+ggsave("~/Downloads/gradient_stability.png", dpi = 1000, width = unit(8.5, "in"), height = unit(4, "in"))
+```
+
+
+```{r}
+key_topics <- read_and_process("key*", c("file"), gradient_dir) %>%
+  separate(file, c("tmp", "method", "alpha", "id", "N", "V", "K"), "_", remove = FALSE) %>%
+  mutate(across(alpha:V, as.numeric))
+```
+
+```{r}
+key_counts <- key_topics %>%
+  group_by(m, alpha, method) %>%
+  count(n_key_topics) %>%
+  mutate(method = gsub("topics-", "", method))
+```
+
+```{r}
+ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
+  geom_hline(yintercept = 5) +
+  geom_point(aes(m, n_key_topics, size = n)) +
+  scale_size(range = c(0, 3)) +
+  labs(
+    x = "K Topics", 
+    y = "Key Topics", 
+    col = expression(alpha),
+    size = "N Simulations"
+  ) +
+  facet_grid(method ~ alpha) +
+  theme(
+    axis.text = element_text(size = 5),
+    axis.title = element_text(size = 16),
+    strip.text = element_text(size = 16),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 10)
+  )
+ggsave("~/Downloads/gradient_key_topics.png", dpi = 500)
+```
+
+
+```{r}
+ggplot(measures %>% filter(alpha %in% subset_alpha, m != "K10")) +
+  geom_point(
+    aes(m, refinement, col = sim),
+    size = .1,
+    position = position_jitter(w = 0.4)
+  ) +
+  facet_grid(method ~ alpha) +
+  scale_colour_stepsn(
+    breaks = c(0.35, 0.7, 0.9, 0.95),
+    colors = c("#662539", "#913551", "#c66281", "#c0d9e5", "#96bfd4", "#478bae"),
+    values = c(0, 0.35, 0.7, 0.9, 0.95, 1)
+  ) +
+  labs(
+    x = "K Topics", 
+    y = "Refinement",
+    col = expression(paste("cossim(", beta[k], ", ", hat(beta)[k], ")"))
+  ) +
+  scale_y_log10() +
+  theme(
+    axis.text.x = element_text(size = 5),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 16),
+    strip.text = element_text(size = 16),
+    legend.title = element_text(size = 14),
+    legend.key.width = unit(1, "cm"),
+    legend.text = element_text(size = 12)
+  )
+ggsave("~/Downloads/gradient_refinement_full.png", dpi = 500, width = unit(8, "cm"), height = unit(5, "cm"))
+```
+
+```{r, fig.height = 3, fig.width = 5}
+paths <- c("exper-transport_0_3_250_1000_5.rda", "exper-transport_0.4_1_250_1000_5.rda", "exper-transport_0.6_10_250_1000_5.rda", "exper-transport_1_1_250_1000_5.rda")
+for (s in seq_along(paths)) {
+  fit <- get(load(file.path(gradient_dir, paths[s])))[[2]]
+  plot(fit)
+  ggsave(sprintf("~/Downloads/gradient_flow-%s.png", s), dpi = 500, height = 3, width = 5)
+}
+```
+
