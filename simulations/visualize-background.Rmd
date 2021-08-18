@@ -61,24 +61,49 @@ similarity <- topic_cossim(betas$betas, betas$beta_hats) %>%
   mutate(m = factor(m, levels = levels(measures$m)))
 
 measures <- measures %>%
-  left_join(similarity) %>%
-  mutate(high_sim = ifelse(sim > 0.95, "Yes", "No"))
+  left_join(similarity)
 rm(similarity)
 ```
 
+
 ```{r}
 subset_alpha <-  c(0, 0.2, 0.4, 0.6, 0.8, 1)
+quantiles <- measures %>% 
+  filter(m_ix != 10, m_ix != 1, alpha %in% subset_alpha) %>%
+  group_by(m_ix, alpha, method) %>%
+  summarize(
+    q_25 = quantile(robustness, 0.25),
+    q_75 = quantile(robustness, 0.75)
+  )
+```
+
+```{r}
 ggplot(
-  measures %>% filter(alpha %in% subset_alpha),
-  aes(m_ix, robustness)
+  measures %>% filter(m_ix != 10, m_ix != 1, alpha %in% subset_alpha),
+  aes(m_ix)
   ) +
-  geom_smooth(size = .5, alpha = 1, col = "darkgrey", se = FALSE) +
+  geom_ribbon(
+    data = quantiles, 
+    aes(m_ix, ymin = q_25, ymax = q_75),
+    size = 0.5,
+    fill = "lightgrey"
+  ) +
   geom_point(
-    size = 0.05, alpha = 0.1 ,
-    position = position_jitter(w = 0.15)
-    ) +
-  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1)) +
-  labs(x = "K Topics", y = "Coherence") +
+    aes(y = robustness, col = sim),
+    size = .1,
+    position = position_jitter(w = 0.2)
+  ) +
+  scale_colour_stepsn(
+    breaks = c(0.35, 0.7, 0.9, 0.95),
+    colors = c("#662539", "#913551", "#c66281", "#c0d9e5", "#96bfd4", "#478bae"),
+    values = c(0, 0.35, 0.7, 0.9, 0.95, 1)
+  ) +
+  scale_x_continuous(labels = scales::label_number(accuracy = 1)) +
+  labs(
+    x = "K Topics", 
+    y = "Coherence",
+    col = expression(paste(max[k], "cossim(", beta[k], ", ", hat(beta), ")"))
+  ) +
   facet_grid(method ~ alpha, scale = "free_y") +
   theme(
     strip.text = element_text(size = 15),
@@ -125,37 +150,53 @@ ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
   )
 ggsave("~/Downloads/gradient_key_topics.png", dpi = 500)
 ```
+```{r}
+quantiles <- measures %>% 
+  filter(m_ix != 10, m_ix != 1, alpha %in% subset_alpha) %>%
+  group_by(m_ix, alpha, method) %>%
+  summarize(
+    q_25 = quantile(refinement, 0.25),
+    q_75 = quantile(refinement, 0.75)
+  )
+```
 
 
 ```{r}
-ggplot(measures %>% filter(alpha %in% subset_alpha, m != "K10")) +
-  geom_point(
-    aes(m, refinement, col = sim),
-    size = .1,
-    position = position_jitter(w = 0.4)
+ggplot(
+  measures %>% filter(m_ix != 10, m_ix != 1, alpha %in% subset_alpha),
+  aes(m_ix)
   ) +
-  facet_grid(method ~ alpha) +
+  geom_ribbon(
+    data = quantiles, 
+    aes(m_ix, ymin = q_25, ymax = q_75),
+    size = 0.5,
+    fill = "lightgrey"
+  ) +
+  geom_point(
+    aes(y = refinement, col = sim),
+    size = .1,
+    position = position_jitter(w = 0.2)
+  ) +
   scale_colour_stepsn(
     breaks = c(0.35, 0.7, 0.9, 0.95),
     colors = c("#662539", "#913551", "#c66281", "#c0d9e5", "#96bfd4", "#478bae"),
     values = c(0, 0.35, 0.7, 0.9, 0.95, 1)
   ) +
+  scale_x_continuous(labels = scales::label_number(accuracy = 1)) +
   labs(
     x = "K Topics", 
     y = "Refinement",
-    col = expression(paste("cossim(", beta[k], ", ", hat(beta)[k], ")"))
+    col = expression(paste(max[k], "cossim(", beta[k], ", ", hat(beta), ")"))
   ) +
-  scale_y_log10() +
+  facet_grid(method ~ alpha, scale = "free_y") +
   theme(
-    axis.text.x = element_text(size = 5),
+    strip.text = element_text(size = 15),
     axis.text.y = element_text(size = 10),
-    axis.title = element_text(size = 16),
-    strip.text = element_text(size = 16),
-    legend.title = element_text(size = 14),
-    legend.key.width = unit(1, "cm"),
-    legend.text = element_text(size = 12)
+    axis.text.x = element_text(size = 10),
+    axis.title = element_text(size = 15),
+    panel.grid.major.x = element_blank()
   )
-ggsave("~/Downloads/gradient_refinement_full.png", dpi = 500, width = unit(8, "cm"), height = unit(5, "cm"))
+ggsave("~/Downloads/gradient_refinement_full.png", dpi = 1000, width = unit(8.5, "in"), height = unit(4, "in"))
 ```
 
 ```{r, fig.height = 3, fig.width = 5}

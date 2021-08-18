@@ -99,7 +99,8 @@ measures <- map_dfr(
 betas <- read_betas(paths)
 similarity <- topic_cossim(betas$betas, betas$beta_hats) %>%
   mutate(
-    m = factor(m, levels = levels(measures$m))
+    m = factor(m, levels = levels(measures$m)),
+    m_ix = as.integer(m)
   )
 ```
 
@@ -108,8 +109,7 @@ below.
 
 ```{r}
 measures <- measures %>%
-  left_join(similarity) %>%
-  mutate(high_sim = ifelse(sim > 0.95, "Yes", "No"))
+  left_join(similarity)
 rm(similarity)
 ```
 
@@ -141,24 +141,42 @@ ggplot(key_counts) +
   )
 ggsave("~/Downloads/key_topics-lda.png", dpi=500)
 ```
+```{r}
+quantiles <- measures %>% 
+  filter(m_ix != 10, m_ix != 1) %>%
+  group_by(m_ix, method) %>%
+  summarize(
+    q_25 = quantile(refinement, 0.25),
+    q_75 = quantile(refinement, 0.75)
+  )
+```
 
 ```{r}
-ggplot(measures %>% filter(!(m %in% c("K1", "K10")))) +
+ggplot(
+  measures %>% filter(m_ix != 10, m_ix != 1),
+  aes(m_ix)
+  ) +
+  geom_ribbon(
+    data = quantiles, 
+    aes(m_ix, ymin = q_25, ymax = q_75),
+    size = 0.5,
+    fill = "lightgrey"
+  ) +
   geom_point(
-    aes(m, refinement, col = sim),
+    aes(y = refinement, col = sim),
     size = .1,
-    position = position_jitter(w = 0.4)
+    position = position_jitter(w = 0.2)
   ) +
   scale_colour_stepsn(
     breaks = c(0.35, 0.7, 0.9, 0.95),
     colors = c("#662539", "#913551", "#c66281", "#c0d9e5", "#96bfd4", "#478bae"),
     values = c(0, 0.35, 0.7, 0.9, 0.95, 1)
   ) +
-  scale_y_log10() +
+  scale_x_continuous(labels = scales::label_number(accuracy = 1)) +
   labs(
     x = "K Topics", 
     y = "Refinement",
-    col = expression(paste("cossim(", beta[k], ", ", hat(beta)[k], ")"))
+    col = expression(paste(max[k], "cossim(", beta[k], ", ", hat(beta), ")"))
   ) +
   facet_grid( ~ method) +
   theme(
