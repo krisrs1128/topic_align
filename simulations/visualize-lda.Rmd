@@ -189,3 +189,49 @@ ggplot(
   )
 ggsave("~/Downloads/refinement_lda.png", dpi=500, width = unit(9, "cm"), height = unit(5, "cm"))
 ```
+
+```{r}
+quantiles <- measures %>% 
+  filter(m_ix != 10, m_ix != 1) %>%
+  group_by(m_ix, method) %>%
+  summarize(
+    q_25 = quantile(robustness, 0.25),
+    q_75 = quantile(robustness, 0.75)
+  )
+```
+
+```{r}
+ggplot(measures, aes(m_ix)) +
+  geom_ribbon(
+    data = quantiles, 
+    aes(m_ix, ymin = q_25, ymax = q_75),
+    size = 0.5,
+    fill = "lightgrey"
+  ) +
+  geom_point(
+    aes(y = robustness, col = sim),
+    size = .1,
+    position = position_jitter(w = 0.2)
+  ) +
+  scale_colour_stepsn(
+    breaks = c(0.35, 0.7, 0.9, 0.95),
+    colors = c("#662539", "#913551", "#c66281", "#c0d9e5", "#96bfd4", "#478bae"),
+    values = c(0, 0.35, 0.7, 0.9, 0.95, 1)
+  ) +
+  scale_x_continuous(labels = scales::label_number(accuracy = 1)) +
+  labs(
+    x = "K Topics", 
+    y = "Coherence",
+    col = expression(paste(max[k], "cossim(", beta[k], ", ", hat(beta), ")"))
+  ) +
+  facet_grid( ~ method) +
+  theme(
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 16),
+    strip.text = element_text(size = 16),
+    legend.title = element_text(size = 14),
+    legend.key.width = unit(1.2, "cm"),
+    legend.text = element_text(size = 10)
+  )
+ggsave("~/Downloads/coherence_lda.png", dpi=500, width = unit(9, "cm"), height = unit(5, "cm"))
+```
