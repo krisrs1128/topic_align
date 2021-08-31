@@ -136,7 +136,7 @@ ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
   scale_size(range = c(0, 3)) +
   labs(
     x = "K Topics", 
-    y = "Key Topics", 
+    y = "Number of Paths", 
     col = expression(alpha),
     size = "N Simulations"
   ) +
@@ -148,7 +148,7 @@ ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
     legend.title = element_text(size = 14),
     legend.text = element_text(size = 10)
   )
-ggsave("~/Downloads/gradient_key_topics.png", dpi = 500)
+ggsave("~/Downloads/gradient_key_topics.png", dpi = 500, width = 9, height = 3.5)
 ```
 ```{r}
 quantiles <- measures %>% 

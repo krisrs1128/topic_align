@@ -123,24 +123,27 @@ key_topics <- read_and_process("key*", c("id"), file.path(params$results_dir, "l
 key_counts <- key_topics %>%
   group_by(m, method) %>%
   count(n_key_topics) %>%
-  filter(m != "K10")
+  filter(m != "K10") %>%
+  mutate(method = str_replace(method, "topics-", ""))
 
 ggplot(key_counts) +
   geom_hline(yintercept = 5) +
   geom_point(aes(x = m, y = n_key_topics, size = n)) +
   labs(
     x = "K Topics", 
-    y = "Key Topics",
+    y = "Number of Paths",
     size = "N Simulations"
   ) +
   facet_wrap(~ method) +
+  scale_size(range = c(0, 6)) +
   theme(
     axis.text = element_text(size = 12),
     axis.title = element_text(size = 16),
     strip.text = element_text(size = 16)
   )
-ggsave("~/Downloads/key_topics-lda.png", dpi=500)
+ggsave("~/Downloads/key_topics-lda.png", dpi=500, height = 4, width = 8)
 ```
+
 ```{r}
 quantiles <- measures %>% 
   filter(m_ix != 10, m_ix != 1) %>%
