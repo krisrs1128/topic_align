@@ -134,6 +134,7 @@ ggplot(key_counts) +
     y = "Number of Paths",
     size = "N Simulations"
   ) +
+  scale_y_continuous(breaks = c(2, 5, 8)) +
   facet_wrap(~ method) +
   scale_size(range = c(0, 6)) +
   theme(

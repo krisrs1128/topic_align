@@ -140,9 +140,11 @@ ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
     col = expression(alpha),
     size = "N Simulations"
   ) +
+  scale_y_continuous(breaks = c(2, 5, 8)) +
   facet_grid(method ~ alpha) +
   theme(
-    axis.text = element_text(size = 5),
+    axis.text.x = element_text(size = 5),
+    axis.text.y = element_text(size = 9),
     axis.title = element_text(size = 16),
     strip.text = element_text(size = 16),
     legend.title = element_text(size = 14),
