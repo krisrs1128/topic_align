@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-git clone git@github.com:lasy/alto.git
-cd alto/vignettes/
+cp /srv/rlibs/alto/doc/*Rmd .
 
 for (( k = 0; k < 1; ++k )); do
   export RUN=$( expr 1 '*' "$id" + "$k")
