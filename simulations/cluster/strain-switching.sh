@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-cp /srv/rlibs/alto/doc/*Rmd .
+cp /alto/vignettes/*.Rmd .
 
 for (( k = 0; k < 1; ++k )); do
   export RUN=$( expr 2 '*' "$id" + "$k")
