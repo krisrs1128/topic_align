@@ -1,5 +1,5 @@
 universe = docker
-docker_image = krisrs1128/alignment:011202
+docker_image = krisrs1128/alignment:011402
 log = /home/ksankaran/logs/lda-$(Process).log
 error = /home/ksankaran/logs/lda-$(Process).err
 output = /home/ksankaran/logs/lda-$(Process).out
