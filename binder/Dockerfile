@@ -23,4 +23,4 @@ RUN Rscript -e "install.packages('devtools')"
 RUN apt-get install -y git
 RUN git clone https://github.com/lasy/alto.git
 RUN Rscript -e "devtools::install('alto')"
-ENV R_HOME="/user/bin/R/"
+ENV R_HOME=/usr/bin/R/
