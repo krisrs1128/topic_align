@@ -1,4 +1,0 @@
-git clone https://github.com/lasy/alto.git
-cd alto/vignettes/
-Rscript -e "devtools::install()"
-
