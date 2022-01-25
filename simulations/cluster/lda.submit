@@ -1,11 +1,11 @@
 universe = docker
-docker_image = krisrs1128/alignment:012502
+docker_image = krisrs1128/alignment:012504
 log = /home/ksankaran/logs/lda-$(Process).log
 error = /home/ksankaran/logs/lda-$(Process).err
 output = /home/ksankaran/logs/lda-$(Process).out
 executable = lda.sh
 environment = "id=$(Process)"
 request_cpus = 1
-request_memory = 500MB
+request_memory = 1GB
 request_disk = 100MB
 queue 25
