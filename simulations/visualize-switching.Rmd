@@ -133,3 +133,12 @@ ggplot(diffs, aes(S, DTotal)) +
     )
 ggsave("~/Downloads/equivalence_similarities.png", dpi = 500)
 ```
+
+```{r, message = FALSE}
+paths <- list.files(equiv_dir, "perplexity*", full = TRUE)
+perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
+  mutate(perplexity, path = paths[as.integer(path)])
+ggplot(perplexity, aes(K, perplexity)) +
+  geom_point(alpha = 0.1, position = position_jitter(w = 0.2))
+ggsave("~/Downloads/switching-perplexity.png", dpi = 400)
+```

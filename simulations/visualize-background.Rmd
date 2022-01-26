@@ -210,3 +210,11 @@ for (s in seq_along(paths)) {
 }
 ```
 
+```{r, message = FALSE}
+paths <- list.files(gradient_dir, "perplexity*", full = TRUE)
+perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
+  mutate(perplexity, path = paths[as.integer(path)])
+ggplot(perplexity, aes(K, perplexity)) +
+  geom_point(alpha = 0.1, position = position_jitter(w = 0.2))
+ggsave("~/Downloads/gradient-perplexity.png", dpi = 400)
+```

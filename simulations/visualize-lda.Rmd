@@ -239,3 +239,14 @@ ggplot(measures, aes(m_ix)) +
   )
 ggsave("~/Downloads/coherence_lda.png", dpi=500, width = unit(9, "cm"), height = unit(5, "cm"))
 ```
+
+```{r, message = FALSE}
+paths <- list.files(lda_dir, "perplexity*", full = TRUE)
+perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
+  mutate(perplexity, path = paths[as.integer(path)])
+ggplot(perplexity, aes(K, perplexity)) +
+  geom_point(alpha = 0.1, position = position_jitter(w = 0.2))
+ggsave("~/Downloads/lda-perplexity.png", dpi = 400)
+```
+
+
