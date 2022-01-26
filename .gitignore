@@ -4,3 +4,4 @@ simulations/*/*Rdata
 *html*
 simulations/results
 *.tar.gz
+.Rproj.user

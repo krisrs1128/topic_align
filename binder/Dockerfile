@@ -1,8 +1,8 @@
 FROM rocker/tidyverse:4.1.2
 
 RUN apt-get update
-RUN apt-get install -y libgsl-dev vim libxml2-dev
-RUN apt-get install -y libssl-dev libcurl4-gnutls-dev pandoc
+RUN apt-get install -y libgsl-dev vim libxml2-dev libxt6
+RUN apt-get install -y libssl-dev libcurl4-gnutls-dev
 RUN Rscript -e "install.packages('Barycenter')"
 RUN Rscript -e "install.packages('MCMCpack')"
 RUN Rscript -e "install.packages('philentropy')"
