@@ -11,13 +11,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 
 ```{r}
 library(alto)
-library(dplyr)
-library(ggplot2)
-library(readr)
-library(tibble)
-library(purrr)
-library(stringr)
-library(tidyr)
+library(tidyverse)
 source("simulation_functions.R")
 source("visualization_functions.R")
 my_theme()
@@ -136,9 +130,25 @@ ggsave("~/Downloads/equivalence_similarities.png", dpi = 500)
 
 ```{r, message = FALSE}
 paths <- list.files(equiv_dir, "perplexity*", full = TRUE)
-perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
-  mutate(perplexity, path = paths[as.integer(path)])
-ggplot(perplexity, aes(K, perplexity)) +
-  geom_point(alpha = 0.1, position = position_jitter(w = 0.2))
-ggsave("~/Downloads/switching-perplexity.png", dpi = 400)
+perplexity <- map_dfr(paths, ~ read_csv(.), .id = "file") %>%
+  suppressMessages() %>%
+  pivot_longer(train:test, "split", values_to="perplexity") %>%
+  mutate(
+    perplexity, 
+    file = paths[as.integer(file)]
+  ) %>%
+  separate(file, c("method", "S", "id", "N", "V", "K_true"), "_", remove = FALSE) %>%
+  mutate(
+    method = str_remove(method, "perplexity-"),
+    S = as.integer(S),
+    K_true = as.integer(str_remove(K_true, ".csv"))
+  )
 ```
+
+```{r fig.height = 5}
+ggplot(perplexity) +
+  geom_line(aes(K, perplexity, group = interaction(file, split), col = split), alpha = 0.4) +
+  scale_y_log10() +
+  facet_wrap(~ S, scales = "free_y")
+```
+

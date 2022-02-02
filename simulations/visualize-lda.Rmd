@@ -122,13 +122,13 @@ key_topics <- read_and_process("key*", c("id"), file.path(params$results_dir, "l
 ```{r}
 key_counts <- key_topics %>%
   group_by(m, method) %>%
-  count(n_key_topics) %>%
+  count(n_topics) %>%
   filter(m != "K10") %>%
   mutate(method = str_replace(method, "topics-", ""))
 
 ggplot(key_counts) +
   geom_hline(yintercept = 5) +
-  geom_point(aes(x = m, y = n_key_topics, size = n)) +
+  geom_point(aes(x = m, y = n_topics, size = n)) +
   labs(
     x = "K Topics", 
     y = "Number of Paths",
@@ -199,8 +199,8 @@ quantiles <- measures %>%
   filter(m_ix != 10, m_ix != 1) %>%
   group_by(m_ix, method) %>%
   summarize(
-    q_25 = quantile(robustness, 0.25),
-    q_75 = quantile(robustness, 0.75)
+    q_25 = quantile(coherence, 0.25),
+    q_75 = quantile(coherence, 0.75)
   )
 ```
 
@@ -213,7 +213,7 @@ ggplot(measures, aes(m_ix)) +
     fill = "lightgrey"
   ) +
   geom_point(
-    aes(y = robustness, col = sim),
+    aes(y = coherence, col = sim),
     size = .1,
     position = position_jitter(w = 0.2)
   ) +
@@ -240,13 +240,20 @@ ggplot(measures, aes(m_ix)) +
 ggsave("~/Downloads/coherence_lda.png", dpi=500, width = unit(9, "cm"), height = unit(5, "cm"))
 ```
 
-```{r, message = FALSE}
-paths <- list.files(lda_dir, "perplexity*", full = TRUE)
-perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
-  mutate(perplexity, path = paths[as.integer(path)])
-ggplot(perplexity, aes(K, perplexity)) +
-  geom_point(alpha = 0.1, position = position_jitter(w = 0.2))
-ggsave("~/Downloads/lda-perplexity.png", dpi = 400)
+```{r}
+paths <- list.files(lda_dir, "perplexity*", full.names = TRUE)
+perplexity <- map_dfr(paths, ~ suppressMessages(read_csv(.)), .id = "path") %>%
+  mutate(path = paths[as.integer(path)]) %>%
+  pivot_longer(train:test, names_to = "split", values_to = "perplexity")
+ggplot(perplexity, aes(as.factor(K), perplexity)) +
+  geom_line(aes(group = interaction(path, split)), alpha = 0.2, width = 0.1) +
+  labs(x = "K", y = "perplexity (log scale)") +
+  facet_wrap(~ split) + 
+  scale_y_log10()
+#ggsave("~/Downloads/lda-perplexity.png", dpi = 400)
 ```
 
+```{r}
+head(perplexity)
+```
 

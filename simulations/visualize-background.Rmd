@@ -11,13 +11,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 
 ```{r}
 library(alto)
-library(dplyr)
-library(ggplot2)
-library(readr)
-library(tibble)
-library(purrr)
-library(stringr)
-library(tidyr)
+library(tidyverse)
 source("simulation_functions.R")
 source("visualization_functions.R")
 my_theme()
@@ -72,8 +66,8 @@ quantiles <- measures %>%
   filter(m_ix != 10, m_ix != 1, alpha %in% subset_alpha) %>%
   group_by(m_ix, alpha, method) %>%
   summarize(
-    q_25 = quantile(robustness, 0.25),
-    q_75 = quantile(robustness, 0.75)
+    q_25 = quantile(coherence, 0.25),
+    q_75 = quantile(coherence, 0.75)
   )
 ```
 
@@ -89,7 +83,7 @@ ggplot(
     fill = "lightgrey"
   ) +
   geom_point(
-    aes(y = robustness, col = sim),
+    aes(y = coherence, col = sim),
     size = .1,
     position = position_jitter(w = 0.2)
   ) +
@@ -125,14 +119,14 @@ key_topics <- read_and_process("key*", c("file"), gradient_dir) %>%
 ```{r}
 key_counts <- key_topics %>%
   group_by(m, alpha, method) %>%
-  count(n_key_topics) %>%
+  count(n_topics) %>%
   mutate(method = gsub("topics-", "", method))
 ```
 
 ```{r}
 ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
   geom_hline(yintercept = 5) +
-  geom_point(aes(m, n_key_topics, size = n)) +
+  geom_point(aes(m, n_topics, size = n)) +
   scale_size(range = c(0, 3)) +
   labs(
     x = "K Topics", 
@@ -210,11 +204,16 @@ for (s in seq_along(paths)) {
 }
 ```
 
-```{r, message = FALSE}
+```{r, message = FALSE, fig.width=8, fig.height=5}
 paths <- list.files(gradient_dir, "perplexity*", full = TRUE)
 perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
-  mutate(perplexity, path = paths[as.integer(path)])
-ggplot(perplexity, aes(K, perplexity)) +
-  geom_point(alpha = 0.1, position = position_jitter(w = 0.2))
-ggsave("~/Downloads/gradient-perplexity.png", dpi = 400)
+  suppressMessages() %>%
+  pivot_longer(train:test, "split", values_to="perplexity") %>%
+  mutate(perplexity, path = basename(paths[as.integer(path)])) %>%
+  separate(path, c("prefix", "alpha", "rep", "N", "D", "K_"),  "_", remove = FALSE)
+ggplot(perplexity) +
+  geom_line(aes(K, perplexity, group = interaction(path, split), col = split), alpha = 0.4) +
+  scale_y_log10() +
+  facet_wrap(alpha ~ split, scales = "free_y")
+#ggsave("~/Downloads/gradient-perplexity.png", dpi = 400)
 ```
