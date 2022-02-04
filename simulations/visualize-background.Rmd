@@ -211,9 +211,14 @@ perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
   pivot_longer(train:test, "split", values_to="perplexity") %>%
   mutate(perplexity, path = basename(paths[as.integer(path)])) %>%
   separate(path, c("prefix", "alpha", "rep", "N", "D", "K_"),  "_", remove = FALSE)
+```
+
+
+```{r, message = FALSE, fig.width=8, fig.height=5}
 ggplot(perplexity) +
-  geom_line(aes(K, perplexity, group = interaction(path, split), col = split), alpha = 0.4) +
-  scale_y_log10() +
-  facet_wrap(alpha ~ split, scales = "free_y")
-#ggsave("~/Downloads/gradient-perplexity.png", dpi = 400)
+  geom_line(aes(K, perplexity, group = interaction(path, split), col = split), alpha = 0.1, size = 0.4) +
+  labs(x = "K", y = "perplexity") +
+  scale_color_manual(values = c("#83A638", "#F2780C")) +
+  facet_wrap(~ alpha, scales = "free_y", ncol = 6)
+ggsave("~/Downloads/gradient-perplexity.png", dpi = 400, width = 7.5, height = 3)
 ```

@@ -145,10 +145,12 @@ perplexity <- map_dfr(paths, ~ read_csv(.), .id = "file") %>%
   )
 ```
 
-```{r fig.height = 5}
-ggplot(perplexity) +
+```{r fig.height = 12, fig.width = 4}
+ggplot(perplexity %>% filter(S %in% seq(10, 230, 40))) +
   geom_line(aes(K, perplexity, group = interaction(file, split), col = split), alpha = 0.4) +
-  scale_y_log10() +
-  facet_wrap(~ S, scales = "free_y")
+  labs(x = "K", y = "perplexity") +
+  scale_color_manual(values = c("#83A638", "#F2780C")) +
+  facet_grid(S ~ split, scales = "free_y")
+ggsave("~/Downloads/switching-perplexity.png", dpi = 400, width = 4, height = 10)
 ```
 

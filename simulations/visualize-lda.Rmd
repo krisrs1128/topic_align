@@ -246,14 +246,10 @@ perplexity <- map_dfr(paths, ~ suppressMessages(read_csv(.)), .id = "path") %>%
   mutate(path = paths[as.integer(path)]) %>%
   pivot_longer(train:test, names_to = "split", values_to = "perplexity")
 ggplot(perplexity, aes(as.factor(K), perplexity)) +
-  geom_line(aes(group = interaction(path, split)), alpha = 0.2, width = 0.1) +
-  labs(x = "K", y = "perplexity (log scale)") +
-  facet_wrap(~ split) + 
-  scale_y_log10()
-#ggsave("~/Downloads/lda-perplexity.png", dpi = 400)
-```
-
-```{r}
-head(perplexity)
+  geom_line(aes(K, group = interaction(path, split), col = split), alpha = 0.1, size = 0.4) +
+  labs(x = "K", y = "perplexity") +
+  facet_grid(. ~ split) +
+  scale_color_manual(values = c("#83A638", "#F2780C"))
+ggsave("~/Downloads/lda-perplexity.png", dpi = 400)
 ```
 
