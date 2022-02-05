@@ -115,18 +115,22 @@ key_topics <- read_and_process("key*", c("file"), gradient_dir) %>%
   separate(file, c("tmp", "method", "alpha", "id", "N", "V", "K"), "_", remove = FALSE) %>%
   mutate(across(alpha:V, as.numeric))
 ```
+```{r}
+head(key_topics)
+```
+
 
 ```{r}
 key_counts <- key_topics %>%
   group_by(m, alpha, method) %>%
-  count(n_topics) %>%
-  mutate(method = gsub("topics-", "", method))
+  count(n_paths) %>%
+  mutate(method = str_remove(method, "topics-"))
 ```
 
 ```{r}
 ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
   geom_hline(yintercept = 5) +
-  geom_point(aes(m, n_topics, size = n)) +
+  geom_point(aes(m, n_paths, size = n)) +
   scale_size(range = c(0, 3)) +
   labs(
     x = "K Topics", 
@@ -216,9 +220,10 @@ perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
 
 ```{r, message = FALSE, fig.width=8, fig.height=5}
 ggplot(perplexity) +
-  geom_line(aes(K, perplexity, group = interaction(path, split), col = split), alpha = 0.1, size = 0.4) +
+  geom_line(aes(K, perplexity, group = interaction(path, split), col = split), alpha = 0.2, size = .8) +
   labs(x = "K", y = "perplexity") +
   scale_color_manual(values = c("#83A638", "#F2780C")) +
-  facet_wrap(~ alpha, scales = "free_y", ncol = 6)
-ggsave("~/Downloads/gradient-perplexity.png", dpi = 400, width = 7.5, height = 3)
+  guides(col = guide_legend(override.aes = list(size = 3, alpha = 1))) +
+  facet_wrap(~ alpha, ncol = 6)
+#ggsave("~/Downloads/gradient-perplexity.png", dpi = 400, width = 7.5, height = 3)
 ```

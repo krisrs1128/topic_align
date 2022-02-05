@@ -11,13 +11,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = FALSE, message = FALSE, warning = FAL
 
 ```{r}
 library(alto)
-library(dplyr)
-library(ggplot2)
-library(readr)
-library(tibble)
-library(purrr)
-library(stringr)
-library(tidyr)
+library(tidyverse)
 source("simulation_functions.R")
 source("visualization_functions.R")
 my_theme()
@@ -122,13 +116,13 @@ key_topics <- read_and_process("key*", c("id"), file.path(params$results_dir, "l
 ```{r}
 key_counts <- key_topics %>%
   group_by(m, method) %>%
-  count(n_topics) %>%
+  count(n_paths) %>%
   filter(m != "K10") %>%
-  mutate(method = str_replace(method, "topics-", ""))
+  mutate(method = str_remove(method, "topics-"))
 
 ggplot(key_counts) +
   geom_hline(yintercept = 5) +
-  geom_point(aes(x = m, y = n_topics, size = n)) +
+  geom_point(aes(m, n_paths, size = n)) +
   labs(
     x = "K Topics", 
     y = "Number of Paths",
@@ -246,9 +240,10 @@ perplexity <- map_dfr(paths, ~ suppressMessages(read_csv(.)), .id = "path") %>%
   mutate(path = paths[as.integer(path)]) %>%
   pivot_longer(train:test, names_to = "split", values_to = "perplexity")
 ggplot(perplexity, aes(as.factor(K), perplexity)) +
-  geom_line(aes(K, group = interaction(path, split), col = split), alpha = 0.1, size = 0.4) +
+  geom_line(aes(K, perplexity, group = interaction(path, split), col = split), alpha = 0.2, size = .8) +
   labs(x = "K", y = "perplexity") +
   facet_grid(. ~ split) +
+  guides(col = guide_legend(override.aes = list(size = 3, alpha = 1))) +
   scale_color_manual(values = c("#83A638", "#F2780C"))
 ggsave("~/Downloads/lda-perplexity.png", dpi = 400)
 ```
