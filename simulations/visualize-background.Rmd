@@ -115,10 +115,6 @@ key_topics <- read_and_process("key*", c("file"), gradient_dir) %>%
   separate(file, c("tmp", "method", "alpha", "id", "N", "V", "K"), "_", remove = FALSE) %>%
   mutate(across(alpha:V, as.numeric))
 ```
-```{r}
-head(key_topics)
-```
-
 
 ```{r}
 key_counts <- key_topics %>%
@@ -217,7 +213,6 @@ perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
   separate(path, c("prefix", "alpha", "rep", "N", "D", "K_"),  "_", remove = FALSE)
 ```
 
-
 ```{r, message = FALSE, fig.width=8, fig.height=5}
 ggplot(perplexity) +
   geom_line(aes(K, perplexity, group = interaction(path, split), col = split), alpha = 0.2, size = .8) +
@@ -225,5 +220,5 @@ ggplot(perplexity) +
   scale_color_manual(values = c("#83A638", "#F2780C")) +
   guides(col = guide_legend(override.aes = list(size = 3, alpha = 1))) +
   facet_wrap(~ alpha, ncol = 6)
-#ggsave("~/Downloads/gradient-perplexity.png", dpi = 400, width = 7.5, height = 3)
+ggsave("~/Downloads/gradient-perplexity.png", dpi = 400, width = 7.5, height = 3)
 ```
