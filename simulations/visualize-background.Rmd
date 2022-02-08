@@ -72,7 +72,8 @@ quantiles <- measures %>%
 ```
 
 ```{r}
-ggplot(
+figures <- list()
+figures[["coherence"]] <- ggplot(
   measures %>% filter(m_ix != 10, m_ix != 1, alpha %in% subset_alpha),
   aes(m_ix)
   ) +
@@ -120,11 +121,15 @@ key_topics <- read_and_process("key*", c("file"), gradient_dir) %>%
 key_counts <- key_topics %>%
   group_by(m, alpha, method) %>%
   count(n_paths) %>%
-  mutate(method = str_remove(method, "topics-"))
+  mutate(
+    method = str_remove(method, "topics-"),
+    m = as.integer(str_remove(as.character(m), "K"))
+  )
+  
 ```
 
 ```{r}
-ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
+figures[["paths"]] <- ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
   geom_hline(yintercept = 5) +
   geom_point(aes(m, n_paths, size = n)) +
   scale_size(range = c(0, 3)) +
@@ -134,6 +139,7 @@ ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
     col = expression(alpha),
     size = "N Simulations"
   ) +
+  scale_x_continuous(labels = scales::label_number(accuracy = 1)) +
   scale_y_continuous(breaks = c(2, 5, 8)) +
   facet_grid(method ~ alpha) +
   theme(
@@ -146,6 +152,7 @@ ggplot(key_counts %>% filter(m != "K10", alpha %in% subset_alpha)) +
   )
 ggsave("~/Downloads/gradient_key_topics.png", dpi = 500, width = 9, height = 3.5)
 ```
+
 ```{r}
 quantiles <- measures %>% 
   filter(m_ix != 10, m_ix != 1, alpha %in% subset_alpha) %>%
@@ -158,7 +165,7 @@ quantiles <- measures %>%
 
 
 ```{r}
-ggplot(
+figures[["refinement"]] <- ggplot(
   measures %>% filter(m_ix != 10, m_ix != 1, alpha %in% subset_alpha),
   aes(m_ix)
   ) +
@@ -213,12 +220,22 @@ perplexity <- map_dfr(paths, ~ read_csv(.), .id = "path") %>%
   separate(path, c("prefix", "alpha", "rep", "N", "D", "K_"),  "_", remove = FALSE)
 ```
 
-```{r, message = FALSE, fig.width=8, fig.height=5}
-ggplot(perplexity) +
+```{r, message = FALSE, fig.width=8, fig.height=2.5}
+ggplot(perplexity %>% filter(alpha %in% subset_alpha)) +
   geom_line(aes(K, perplexity, group = interaction(path, split), col = split), alpha = 0.2, size = .8) +
   labs(x = "K", y = "perplexity") +
   scale_color_manual(values = c("#83A638", "#F2780C")) +
   guides(col = guide_legend(override.aes = list(size = 3, alpha = 1))) +
   facet_wrap(~ alpha, ncol = 6)
 ggsave("~/Downloads/gradient-perplexity.png", dpi = 400, width = 7.5, height = 3)
+```
+```{r, fig.height = 13, fig.width= 9}
+library(patchwork)
+figures[["paths"]] <- figures[["paths"]] + ggtitle("a") + theme(title = element_text(size = 14))
+figures[["coherence"]] <- figures[["coherence"]] + ggtitle("b") +theme(title = element_text(size = 14))
+figures[["refinement"]] <- figures[["refinement"]] + ggtitle("c") +theme(title = element_text(size = 14))
+((figures[["paths"]] + plot_layout(guides = "keep")) / (figures[["coherence"]] / figures[["refinement"]] +
+  plot_layout(guides = "collect"))) +
+  plot_layout(heights = c(1, 2))
+ggsave("~/Downloads/gradient-combined.png")
 ```

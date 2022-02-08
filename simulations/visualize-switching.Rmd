@@ -38,29 +38,32 @@ similarities <- read_and_process("*similarities*", c("rep", "S"), equiv_dir)
 ```
 
 ```{r}
-exper <- get(load(file.path(equiv_dir, "exper-transport_230_12_250_1000_5.rda")))
+figures <- list()
+exper <- get(load(file.path(equiv_dir, "exper-transport_230_44_250_1000_5.rda")))
 sim_data <- exper[[1]]
 fit <- exper[[2]]
-plot(fit) +
-  labs(x = "K Topics") +
-  labs(x = "K Topics") +
+figures[["flow"]] <- plot(fit) +
+  labs(x = "K Topics", title = "a") +
   theme(
     axis.text.y = element_blank(),
-    axis.text.x = element_text(size = 10),
-    axis.title.x = element_text(size = 16)
+    axis.text.x = element_text(size = 8),
+    axis.title.x = element_text(size = 11),
+    title = element_text(size = 14)
   )
 ggsave("~/Downloads/equivalence_flow.png", dpi=500, height = unit(3, "in"), width = unit(4, "in"))
 ```
 
 ```{r, fig.height = 2, fig.width = 6}
-plot_beta(fit, models = c("K5", "K6", "K7"), n_features = 200) +
+figures[["betas"]] <- plot_beta(fit, models = c("K5", "K6", "K7"), n_features = 200) +
   theme(
-    axis.text.x = element_text(size = 16),
+    axis.text.x = element_text(size = 8),
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank(),
     panel.grid.major.y = element_blank(),
-    strip.text = element_text(size = 18)
+    strip.text = element_text(size = 12),
+    title = element_text(size = 14)
   ) +
+  ggtitle("b") +
   scale_size(range = c(0, 35), limits = c(0, 1))
 ggsave("~/Downloads/equivalence_betas.png", dpi=750)
 ```
@@ -68,7 +71,7 @@ ggsave("~/Downloads/equivalence_betas.png", dpi=750)
 ```{r}
 model_sims <- similarities %>%
   filter(
-    file == "similarities-transport_230_12_250_1000_5.csv",
+    file == "similarities-transport_230_44_250_1000_5.csv",
     m %in% str_c("K", 5:7)
   ) %>%
   group_by(m) %>%
@@ -78,7 +81,7 @@ model_sims <- similarities %>%
   pivot_longer(starts_with("V"), names_to = "truth", values_to = "similarity") %>%
   mutate(truth = gsub("V", "", truth))
 
-ggplot(model_sims) +
+figures[["hm"]] <- ggplot(model_sims) +
   geom_tile(aes(k_LDA, truth, fill = similarity)) +
   scale_x_discrete(expand = c(0, 0)) +
   scale_y_discrete(expand = c(0, 0)) +
@@ -114,7 +117,7 @@ diffs <- similarities %>%
   group_by(m, method, S, id, rep) %>%
   summarise(DTotal = mean(abs(V1 - V2) + abs(V3 - V4)))
 
-ggplot(diffs, aes(S, DTotal)) +
+figures[["similarities"]] <- ggplot(diffs, aes(S, DTotal)) +
   geom_smooth(method = "lm", col = "#5d3954") +
   geom_point(alpha = 0.6, size = 0.3) +
   facet_grid(method ~ m) +
@@ -147,11 +150,21 @@ perplexity <- map_dfr(paths, ~ read_csv(.), .id = "file") %>%
 
 ```{r fig.height = 12, fig.width = 4}
 ggplot(perplexity %>% filter(S %in% seq(10, 230, 40))) +
-  geom_line(aes(K, perplexity, group = interaction(path, split), col = split), alpha = 0.2, size = .8) +
+  geom_line(aes(K, perplexity, group = interaction(file, split), col = split), alpha = 0.2, size = .8) +
   labs(x = "K", y = "perplexity") +
   scale_color_manual(values = c("#83A638", "#F2780C")) +
   guides(col = guide_legend(override.aes = list(size = 3, alpha = 1))) +
   facet_grid(S ~ split)
 ggsave("~/Downloads/switching-perplexity.png", dpi = 400, width = 4, height = 10)
+```
+
+```{r, fig.height = 10, fig.width = 10}
+library(patchwork)
+#(figures[["flow"]] + figures[["betas"]]) / figures[["hm"]]
+#(figures[["flow"]] + figures[["betas"]]) / (figures[["hm"]] + figures[["similarities"]])
+figures[["hm"]] <- figures[["hm"]] + ggtitle("c") + theme(title = element_text(size = 14))
+figures[["similarities"]] <- figures[["similarities"]] + ggtitle("d") + theme(title = element_text(size = 14))
+(figures[["flow"]] + figures[["betas"]]) / figures[["hm"]]
+ggsave("~/Downloads/equivalence-combined.png")
 ```
 

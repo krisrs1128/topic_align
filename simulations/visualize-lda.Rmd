@@ -114,13 +114,17 @@ key_topics <- read_and_process("key*", c("id"), file.path(params$results_dir, "l
 ```
 
 ```{r}
+p <- list()
 key_counts <- key_topics %>%
   group_by(m, method) %>%
   count(n_paths) %>%
   filter(m != "K10") %>%
-  mutate(method = str_remove(method, "topics-"))
+  mutate(
+    method = str_remove(method, "topics-"),
+    m = as.integer(str_remove(as.character(m), "K"))
+  )
 
-ggplot(key_counts) +
+p[["paths"]] <- ggplot(key_counts) +
   geom_hline(yintercept = 5) +
   geom_point(aes(m, n_paths, size = n)) +
   labs(
@@ -129,6 +133,7 @@ ggplot(key_counts) +
     size = "N Simulations"
   ) +
   scale_y_continuous(breaks = c(2, 5, 8)) +
+  scale_x_continuous(labels = scales::label_number(accuracy = 1)) +
   facet_wrap(~ method) +
   scale_size(range = c(0, 6)) +
   theme(
@@ -150,7 +155,7 @@ quantiles <- measures %>%
 ```
 
 ```{r}
-ggplot(
+p[["refinement"]] <- ggplot(
   measures %>% filter(m_ix != 10, m_ix != 1),
   aes(m_ix)
   ) +
@@ -199,7 +204,7 @@ quantiles <- measures %>%
 ```
 
 ```{r}
-ggplot(measures, aes(m_ix)) +
+p[["coherence"]] <- ggplot(measures %>% filter(m_ix < 10), aes(m_ix)) +
   geom_ribbon(
     data = quantiles, 
     aes(m_ix, ymin = q_25, ymax = q_75),
@@ -246,5 +251,15 @@ ggplot(perplexity, aes(as.factor(K), perplexity)) +
   guides(col = guide_legend(override.aes = list(size = 3, alpha = 1))) +
   scale_color_manual(values = c("#83A638", "#F2780C"))
 ggsave("~/Downloads/lda-perplexity.png", dpi = 400)
+```
+
+```{r, fig.height = 4, fig.width= 12}
+library(patchwork)
+p[["paths"]] <- p[["paths"]] + ggtitle("a") + theme(title = element_text(size = 14))
+p[["coherence"]] <- p[["coherence"]] + ggtitle("b") + theme(title = element_text(size = 14))
+p[["refinement"]] <- p[["refinement"]] + ggtitle("c") + theme(title = element_text(size = 14))
+p[["paths"]] + p[["coherence"]] + (p[["refinement"]] + theme(legend.position = "none")) +
+  plot_layout(guides = "collect")
+ggsave("~/Downloads/lda-combined.png", height = 4, width = 14)
 ```
 
