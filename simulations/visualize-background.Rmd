@@ -264,7 +264,7 @@ library(patchwork)
 (figures[["paths_alpha_1"]] + figures[["coherence_alpha_1"]] + figures[["refinement_alpha_1"]]) /
 (figures[["paths_alpha_noise"]] + figures[["coherence_alpha_noise"]] + figures[["refinement_alpha_noise"]]) +
   plot_layout(height = c(1, 5), guides = "collect")
-ggsave("~/Downloads/gradient-combined.png", height = 10, width = 9)
+#ggsave("~/Downloads/gradient-combined.png", height = 10, width = 9)
 ```
 
 
