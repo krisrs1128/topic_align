@@ -1,5 +1,0 @@
-source("/Users/laurasymul/Documents/Work/Research/Packages/topic_align/R_LSY/run_lda_models.R")
-source("/Users/laurasymul/Documents/Work/Research/Packages/topic_align/R_LSY/align_topics.R")
-source("/Users/laurasymul/Documents/Work/Research/Packages/topic_align/R_LSY/trim_models.R")
-source("/Users/laurasymul/Documents/Work/Research/Packages/topic_align/R_LSY/visualize_aligned_topics.R")
-source("/Users/laurasymul/Documents/Work/Research/Packages/topic_align/R_LSY/score_along_branches.R")
