@@ -1,0 +1,22 @@
+This directory contains the scripts for simulating
+data to explore the empirical asymptotic behavior of
+topic alignment and associated diagnostic scores as
+the number of samples increases.
+
+Simulations were run on the Stanford Sherlock servers
+using the script "alto-lda-asymptotic.sh".
+This script execute "run_simulations_for_asymptotic_behavior.Rmd"
+within a singularity container (singularity_alto).
+The results are stored in a directory "lda-asymptotic"
+(which not in this repo due to its size), and analysed with
+"simulation-analyses.Rmd" which calls function in the "R/" directory,
+and produces figures stored in "figures/".
+
+To reproduce these simulations:
+
+1. build the singularity images on a linux machine on which you have "sudo" rights.
+(I did it using a vagrant virtual machine on my laptop)
+2. Transfer the image on computing clusters where singularity is available.
+3. Adapt the "alto-lda-asymptotic.sh" script to fit your clusters requirements
+4. Run the simulations with that script.
+5. Analyse the results with "simulation-analyses.Rmd"

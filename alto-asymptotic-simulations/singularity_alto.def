@@ -1,0 +1,6 @@
+Bootstrap: localimage
+From: /vagrant/LDA_simulations.sif
+
+%post
+  R --slave -e 'library("devtools"); devtools::install_github("lasy/alto")'
+  R --slave -e 'packageVersion("alto")'

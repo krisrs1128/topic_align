@@ -1,0 +1,22 @@
+Bootstrap: docker
+From: r-base
+
+%post
+
+  apt-get update
+  apt-get install libxml2 libxml2-dev
+  apt-get install -y libcurl4-openssl-dev
+  apt-get install -y libssl-dev
+  apt-get install -y libfontconfig1-dev
+  apt-get install -y libharfbuzz-dev libfribidi-dev
+  apt-get install -y libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev
+  apt-get install -y pandoc
+
+  R --version
+  R --slave -e 'install.packages("tidyverse", dependencies = TRUE)'
+  R --slave -e 'install.packages("devtools", dependencies = TRUE)'
+
+%test
+  R --slave -e 'cat("tidyverse version : "); packageVersion("tidyverse"); library(tidyverse)'
+  R --slave -e 'cat("devtools version : ");packageVersion("devtools")'
+  R --slave -e 'cat("pandoc available : "); rmarkdown::pandoc_available()'
