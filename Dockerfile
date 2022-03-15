@@ -9,8 +9,8 @@ RUN Rscript -e "install.packages('philentropy')"
 RUN Rscript -e "install.packages('scales')"
 RUN Rscript -e "install.packages('superheat')"
 RUN Rscript -e "install.packages('topicmodels')"
-
 RUN Rscript -e "install.packages('devtools')"
+
 RUN apt-get install -y git
 RUN git clone https://github.com/lasy/alto.git
 RUN Rscript -e "devtools::install('alto')"
