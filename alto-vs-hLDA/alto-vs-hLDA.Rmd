@@ -1,0 +1,250 @@
+---
+title: "ALTO vs h-LDA"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+
+```
+
+
+```{r install-github, echo = FALSE, eval = FALSE}
+devtools::install_github("lasy/hLDA")
+```
+
+
+In this document, we compare the results and intepretation of `alto` and `hLDA` 
+on several real and synthetic datasets.
+
+While topic alignment visualizations are similar to visualizations of 
+hierarchical structures, it is important to note that topic alignment is not a 
+hierarchical method. Topic alignment fulfills a different purpose than 
+hierarchical topic models (hLDA) and relies on different assumptions. 
+There are several important distinctions between topic alignment and hLDA, 
+and applying these methods on the same datasets leads to different results, 
+interpretations, and conclusions. 
+
+- hLDA assumes that topics follow a strict tree-like hierarchical structure: 
+child-topics have only one parent.
+
+- In the hLDA framework, samples belong to a single path in the hierarchy; 
+they can only be composed of topics that are part of the same branch. 
+
+- Being a more complex model, hLDA has two additional hyper-parameters 
+(the depth, and the concentration parameter for introducing new topics) 
+compared to LDA. Moreover, the interpretation of the parameters, and choosing 
+their value, is not as intuitive as those of LDA. Consequently, deploying hLDA 
+on datasets requires additional effort to identify optimal values for these parameters.
+
+- We can interpret child-topics as sub-topics, and the hierarchical structure as 
+a topic taxonomy. For example, in the NLP context,  football, tennis, and climbing 
+could be sub-topics of a sport topic. Specific terms are characterizing these 
+sub-topics (e.g., “harness” for climbing, or “racket” for tennis), 
+while the sport parent topic might be characterized by terms such as 
+“competition”, “training”, or “fitness” which we expect to find in documents 
+related to either football, climbing, or tennis. 
+
+On the other hand, topic alignment is a post-estimation method to guide scientists 
+in their exploratory analyses when modeling their data with topic models (LDA). 
+There are no assumptions regarding the relationships between topics at different 
+resolutions. These relationships and the diagnostic scores provide useful 
+information to users for interpreting their data; especially if the data 
+generation process does not strictly follow the LDA assumptions and when 
+perplexity curves do not show a clear elbow.
+
+Importantly, for microbiota structure analyses, hLDA assumptions are not in 
+agreement with observed data. Even if bacterial sub-communities were organized 
+hierarchically (e.g., because of strain switching) we would still expect 
+sub-communities from different branches of the hierarchy to co-exist within a 
+given ecosystem (i.e., sample). 
+
+Moreover, the current implementations of hLDA (see 
+[tomotopy python library](https://bab2min.github.io/tomotopy/v0.12.2/en/index.html) 
+are not well suited for analyses of microbiota composition for two practical reasons. 
+First, they require samples to be provided in a corpus format, 
+as opposed to a matrix of counts. Given current library depths, 
+transforming ASV counts into text files leads to very large files (7+ GB). 
+Second, the time required to fit a single hLDA model is larger than to fit LDA 
+models at multiple resolution and aligning the topics. For example, fitting
+hLDA on a subset of the vaginal microbiota data takes just under a minute.
+In comparison, it takes approximately 20-25 seconds to fit 15 LDA models and 
+perform the topic alignment on the same dataset.
+
+The analyses below illustrate these differences and contrast `hLDA` with `alto`. 
+
+
+## Comparing `hLDA` and `alto` on the vaginal microbiota composition data
+
+
+```{r libraries}
+library(alto)
+library(hLDA)
+library(tidyverse)
+library(tictoc)
+library(ggpubr)
+library(magrittr)
+```
+
+
+First, we load the vaginal microbiota data embedded in the `alto` package.
+
+```{r VM-data-full, cache = FALSE}
+
+source("R/load_VM_data.R")
+data <- load_VM_data()
+dim(data)
+
+# hLDA requires data to be saved as corpus (i.e., all the words in the document, not a matrix count)
+data_as_corpus <- hLDA::transform_count_matrix_to_corpus(data)
+object.size(data_as_corpus) %>% format(units = "GB", standard = "SI")
+
+```
+
+Because this dataset is too large for running hLDA on a personal computer,
+we take a small but still realistic subset of the data by reducing the libraries
+depth, selecting random samples, and removing all features that are present 
+in less than 3 documents.
+
+
+```{r VM-data-subset}
+
+data_subset <- round(data/5000) # reducing library size
+data_subset <- data_subset[sample(1:nrow(data),500), ] # selecting random samples
+data_subset <- data_subset[,colSums(data_subset > 0) >= 3] #making sure features are present in at least 3 docs
+dim(data_subset)
+mean(rowSums(data_subset > 0)) * mean(colSums(data_subset)) 
+
+```
+
+
+
+```{r vm-subset-run-hlda}
+
+tic()
+m1 <- hLDA(data_subset, depth = 4, gamma = 0.01)
+toc()
+
+```
+
+
+
+```{r plot-m1, fig.width=12, fig.height=15}
+
+g1 <- plot_hLDA(m1, min_p = 0.1, title = "depth = 4; gamma = 0.01")
+g1
+
+```
+
+```{r save-m1-plot}
+
+ggsave(filename = "figures/m1.png", plot = g1, height = 22, width = 18, units = "cm", scale = 2.5)
+
+```
+
+
+To get a sense of the effect of the hyper-parameters such as the `depth` or `gamma`,
+we run two additional models: one with a smaller `depth`, and one with a larger `gamma`.
+
+
+
+```{r vm-subset-run-hlda-m2, fig.width=10, fig.height=15}
+
+m2 <- hLDA(data_subset, depth = 3, gamma = 0.01)
+
+g2 <- plot_hLDA(m2, min_p = 0.1, title = "depth = 3; gamma = 0.01")
+g2
+
+ggsave(filename = "figures/m2.png", plot = g2, height = 22, width = 18, units = "cm", scale = 2.5)
+
+```
+
+
+
+
+```{r vm-subset-run-hlda-m3, fig.width=10, fig.height=15}
+
+m3 <- hLDA(data_subset, depth = 3, gamma = 0.1)
+
+g3 <- plot_hLDA(m3, min_p = 0.1, title = "depth = 3; gamma = 0.1")
+g3
+
+ggsave(filename = "figures/m3.png", plot = g3, height = 22, width = 18, units = "cm", scale = 2.5)
+
+```
+
+Finally, since we observe that sample composition is quite sparse, we fit a last
+model with a larger prior value for `alpha` which is the Dirichlet parameter for
+the sample composition distribution.
+
+
+
+
+```{r vm-subset-run-hlda-m4, fig.width=10, fig.height=15}
+
+m4 <- hLDA(data_subset, depth = 3, gamma = 0.01, alpha = 0.5)
+
+g4 <- plot_hLDA(m4, min_p = 0.1, title = "depth = 3; gamma = 0.01; alpha = 0.5")
+g4
+
+ggsave(filename = "figures/m4.png", plot = g4, height = 22, width = 18, units = "cm", scale = 2.5)
+
+```
+
+
+We observe that 
+
+- hLDA returns a lot of topics, and it is not obvious how to control
+for the number of topics;
+
+- Sample composition is almost always dominated by a specific topic (regardless 
+of the Dirichlet prior for sample composition).
+
+- There is a lot of redundancy in the topics. Several paths are used to described
+samples dominated by L. iners and L. crispatus.
+
+- The interpretation of these topics and their relationship is not easy due to 
+the large number of topics and the assumption that samples can only lie on one path.
+
+
+In comparison, aligning LDA topics provides a more interpretable analysis of the
+microbiota composition because it is easy to control for the number of topics and 
+because there is no constrain on sample composition.
+
+
+```{r alto-on-VM-data}
+
+Kmax = 15
+lda_varying_params_lists = 
+  map(.x = 1:Kmax, .f = function(K) list(k = K)) %>% 
+  set_names(str_c("K",1:Kmax))
+
+tic()
+lda_models <- 
+  alto::run_lda_models(
+    data = data_subset, 
+    lda_varying_params_lists = lda_varying_params_lists
+    )
+
+alignment <- align_topics(models = lda_models, method = "product")
+toc()
+
+```
+
+
+```{r alto-alignment-VM-data, fig.height=15, fig.width=10}
+
+source("R/plot_alto.R")
+source("R/plot_gamma.R")
+ga <- plot_alto(alignment) 
+ga
+
+```
+
+```{r save-alto-viz}
+
+ggsave("figures/alto_viz.png", ga, height = 22, width = 18, units = "cm", scale = 2.5)
+
+```
+

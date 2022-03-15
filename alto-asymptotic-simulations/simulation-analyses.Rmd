@@ -1,0 +1,165 @@
+---
+title: "Untitled"
+author: "Laura Symul"
+date: "12/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(magrittr)
+library(ggpubr)
+invisible(sapply(str_c("R/",list.files("R/")), source))
+
+theme_set(theme_light())
+
+```
+
+
+```{r load-simulation-results}
+
+dir <- "lda-asymptotic/"
+key_topics_files <- list.files(dir,"key_topics")
+
+key_topics <- 
+  map_dfr(
+    .x = key_topics_files,
+    .f = function(f) {
+      this_df <- read_csv(str_c(dir,f), show_col_types = FALSE)
+      params <- 
+        f %>% str_remove("key_topics-") %>% str_remove("\\.csv") %>% 
+        str_split_fixed(., "_",5) %>% 
+        set_colnames(c("method","id","N","V","K")) %>% 
+        as_tibble() %>% 
+        mutate(across(c(id, N, V, K), as.numeric))
+      this_df <- 
+        left_join(params, this_df, by = "id")
+    }
+  )
+
+
+topics_files <- list.files(dir, "^topics-")
+topics <- 
+  map_dfr(
+    .x = topics_files,
+    .f = function(f) {
+      this_df <- read_csv(str_c(dir,f), show_col_types = FALSE)
+      params <- 
+        f %>% str_remove("topics-") %>% str_remove("\\.csv") %>% 
+        str_split_fixed(., "_",5) %>% 
+        set_colnames(c("method","id","N","V","K")) %>% 
+        as_tibble() %>% 
+        mutate(across(c(id, N, V, K), as.numeric))
+      this_df <- 
+        left_join(params, this_df, by = "id")
+    }
+  )
+
+
+```
+
+
+```{r compute-model-summaries-and-estimated-number-of-topics}
+
+
+topics_score_summary <- 
+  topics %>% 
+  mutate(n_topics = m %>% str_remove("K") %>% as.numeric()) %>% 
+  group_by(method, N, V, K, id, m, n_topics) %>% 
+  summarize(
+    coherence_summary = min(coherence),
+    refinement_summary = min(refinement),  #  %>%  log10()
+    .groups = "drop"
+  )  %>% 
+  left_join(
+    ., 
+    key_topics %>% group_by(method, id, N, V, K, n_paths) %>% mutate(n = n()) %>% ungroup(),
+    by = c("method", "N", "V", "K", "id", "m", "n_topics")
+  ) %>% 
+  mutate(score = n * refinement_summary  * coherence_summary) %>%  # * median_refinement  * median_coherence
+  arrange(method, N, -score)
+
+
+# n_topics <- 
+#   topics_score_summary %>% 
+#   group_by(method, id, N, V, K) %>%
+#   mutate(max_score = max(score)) %>% 
+#   filter(score == max_score) %>% 
+#   group_by(method, id, N, V, K, n) %>% 
+#   summarize(K_hat = mean(n_topics), .groups = "drop")
+
+n_topics <- 
+  key_topics %>% 
+  group_by(method, id, N, V, K, n_paths) %>% 
+  mutate(n = n()) %>% 
+  group_by(method, id, N, V, K) %>% 
+  mutate(max_n = max(n)) %>% 
+  ungroup() %>% 
+  filter(n == max_n) %>% 
+  group_by(method, id, N, V, K) %>% 
+  summarize(K_hat = mean(n_paths), n = mean(n), .groups = "drop")
+
+
+```
+
+
+```{r median-scores-and-n-path}
+
+method_colors <-  c("aquamarine3","lightpink3")
+
+g_scores <- plot_scores(topics_score_summary, colors = method_colors)
+g_scores
+
+ggsave(filename = str_c("figures/scores.png"), g_scores, 
+       width = 17, height = 10, units = "cm", scale = 1.5)
+
+
+#plot_median_scores(topics_score_summary, score = "coherence")
+#plot_median_scores(topics_score_summary, score = "refinement")
+#plot_median_scores(topics_score_summary, score = "nb of paths")
+
+
+```
+
+
+
+```{r}
+
+
+g_k_hat_hist <- 
+  ggplot(n_topics,
+       aes(x = K_hat, fill = method)) +
+  geom_histogram(aes(y = ..density..), binwidth = 1) +
+  scale_fill_manual(values = method_colors) +
+  guides(fill = "none") +
+  facet_grid(N ~ method, labeller = labeller(N = label_both, method = label_value)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 1/4)) +
+  scale_x_continuous(breaks = seq(1,10, by = 2)) +
+  xlab("estimated K")
+
+g_k_hat_hist
+
+ggsave(filename = "figures/histogram_of_estimated_K.png", g_k_hat_hist, 
+       width = 8.5, height = 10, units = "cm", scale = 1.5)
+
+```
+
+```{r full-figure}
+
+g <- 
+  ggarrange(g_scores, g_k_hat_hist,
+            ncol = 2, nrow = 1,
+            widths = c(3,1),
+            labels = c("","d"),
+            align = "h")
+
+
+ggsave(filename = "figures/summary_alto_asymptotic_behavior.png", g, 
+       width = 18, height = 10, units = "cm", scale = 1.6)
+
+
+```
+
+

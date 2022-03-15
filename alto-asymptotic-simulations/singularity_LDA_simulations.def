@@ -1,0 +1,11 @@
+Bootstrap: localimage
+From: /vagrant/devtools_tidyverse.sif
+
+%post
+
+  apt-get update
+  apt-get install -y gsl-bin libgsl0-dev
+  R --version
+  R --slave -e 'install.packages("xml2")'
+  R --slave -e 'install.packages("topicmodels", dependencies = TRUE)'
+  R --slave -e 'install.packages("MCMCpack", dependencies = TRUE)'

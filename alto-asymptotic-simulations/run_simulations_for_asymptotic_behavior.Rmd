@@ -1,0 +1,72 @@
+---
+title: "Run simulations for asymptotic behavior"
+author: "Laura Symul"
+date: "1/25/2022"
+output: html_document
+params:
+  n_iters: 1 # number of dataset per set of parameters
+  min_N: 5 # minimum number of documents
+  n_N: 3 # number of different document values
+  mult_factor_N: 2 # multiplicative factor for increasing the number of documents
+  true_K: 5 # actual number of topics
+  V: 100 # the vocab size (or number of features)
+  n_models: 10 # the largest number of topics for the LDA fits
+  out_dir: "lda-asymptotic" # where the simulation results should be stored
+  reset: FALSE
+---
+
+```{r run-simulations--setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+
+```{r run-simulations--params}
+attach(params)
+p <- 
+  tidyr::expand_grid(
+    N = min_N * mult_factor_N^(0:(n_N-1)),
+    method = c("product","transport"),
+    id = 1:n_iters
+  )
+```
+
+
+
+```{r retrieving-the-latest-version-of-the-package-vignette}
+download.file("https://raw.github.com/lasy/alto/master/vignettes/lda.Rmd", "lda.Rmd")
+```
+
+
+
+```{r run-simulations--running-them}
+
+catch <- 
+  purrr::map(
+    .x = 1:nrow(p),
+    .f = function(i) {
+      id_i <- p$id[i]
+      N_i <- p$N[i]
+      method_i <- p$method[i]
+      filename <- 
+        stringr::str_c(
+          out_dir,"/key_topics-",
+          stringr::str_c(c(method_i,id_i, N_i, V, true_K), collapse = "_"),
+          ".csv"
+          )
+      if(reset | !file.exists(filename))
+        rmarkdown::render(
+          'lda.Rmd', 
+          params = list(
+            V = V, K = true_K, n_models = n_models, out_dir = out_dir, save = TRUE,
+            id = id_i, N = N_i, method = method_i
+          )
+        )
+    }
+  )
+
+```
+
+
